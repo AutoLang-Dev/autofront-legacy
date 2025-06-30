@@ -591,9 +591,9 @@ auto lex_line(std::string_view line,
                         errors.push_back({.where = pos(), .message = "character literal is empty"});
                         return false;
                     }
-                    if (peeks[1] == char{}) {
+                    if (peeks[1] == char{} || peeks[2] != '\'') {
                         errors.push_back({
-                            .where   = pos(),
+                            .where   = next(2uz),
                             .message = "character literal is missing its closing `'`",
                         });
                         return false;
