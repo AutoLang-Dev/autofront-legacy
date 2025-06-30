@@ -357,7 +357,9 @@ auto lex_line(std::string_view line,
                 //     }
                 // } else {
                 //     if (peeks[1] == '=') {
-                /*      */ store(2uz, lexeme::GreaterEq);
+                //         store(2uz, lexeme::GreaterEq);
+                //     } else {
+                /*      */ store(1uz, lexeme::Greater);
                 //     }
                 // }
                 break;
