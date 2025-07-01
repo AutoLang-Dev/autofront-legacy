@@ -723,10 +723,11 @@ template <BraceOrGlobal Brace>
 auto track_braces(const token*& it, const token* last, token left, std::vector<error_entry>& errors) -> Brace
 // pre(it < last)
 {
-    auto angles = std::vector<std::size_t>{};
-    auto nodes  = node_list{};
+    auto angles     = std::vector<std::size_t>{};
+    auto nodes      = node_list{};
+    auto last_token = std::numeric_limits<std::size_t>::max();
     for (; it < last; ++it) {
-        auto&& [view, pos, type] = *it;
+        auto [view, pos, type] = *it;
         if (type == lexeme::LeftBrace || type == lexeme::LeftBracket || type == lexeme::LeftParen) {
             auto left = *it;
             ++it;
@@ -778,12 +779,32 @@ auto track_braces(const token*& it, const token* last, token left, std::vector<e
                     .nodes = std::move(in_angle),
                 });
             } else {
-                if (type == lexeme::Less) {
-                    angles.emplace_back(nodes.size());
-                } else if (type == lexeme::Semicolon) {
-                    angles.clear();
+                auto has_merged = false;
+                if (last_token != std::numeric_limits<std::size_t>::max() && last_token + 1uz == nodes.size()) {
+                    auto& prev_token = std::get<token>(nodes.back());
+                    if (prev_token.view.end() == view.begin()) {
+                        std::println("{} {} may be merged", _as<std::string>(prev_token.type), _as<std::string>(type));
+                        auto merge = [&](lexeme prev, lexeme current, lexeme merged) {
+                            if (prev_token.type == prev && type == current) {
+                                prev_token.view = {prev_token.view.begin(), view.end()};
+                                prev_token.type = merged;
+                                has_merged      = true;
+                            }
+                        };
+                        merge(lexeme::Greater, lexeme::Greater, lexeme::RightShift);
+                        merge(lexeme::Greater, lexeme::Assignment, lexeme::GreaterEq);
+                        merge(lexeme::RightShift, lexeme::Assignment, lexeme::RightShiftEq);
+                    }
                 }
-                nodes.emplace_back(*it);
+                if (!has_merged) {
+                    if (type == lexeme::Less) {
+                        angles.emplace_back(nodes.size());
+                    } else if (type == lexeme::Semicolon) {
+                        angles.clear();
+                    }
+                    last_token = nodes.size();
+                    nodes.emplace_back(*it);
+                }
             }
         }
     }
