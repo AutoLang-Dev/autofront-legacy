@@ -623,6 +623,201 @@ auto lex_line(std::string_view line,
     return tokens.size() != origial_size;
 }
 
+// AutoFront 同样需要括号跟踪器
+// 但与 Cpp2 不同的是，该括号跟踪器是为了更好地解析模板尖括号，并抽象出一些利于后续分析的结构
+namespace braces_tracker
+{
+
+struct brace;
+
+struct bracket;
+
+struct paren;
+
+struct angle;
+
+using node = std::variant<token, brace, bracket, paren, angle>;
+
+using node_list = std::vector<node>;
+
+struct brace
+{
+    token left;
+    token right;
+    node_list nodes;
+};
+
+struct bracket
+{
+    token left;
+    token right;
+    node_list nodes;
+};
+
+struct paren
+{
+    token left;
+    token right;
+    node_list nodes;
+};
+
+struct angle
+{
+    token left;
+    token right;
+    node_list nodes;
+};
+
+}
+
+}
+
+namespace autofront
+{
+
+export namespace braces_tracker
+{
+
+template <typename T>
+concept BraceStructure = std::same_as<T, brace> || std::same_as<T, bracket> || std::same_as<T, paren>;
+
+template <BraceStructure Brace>
+struct brace_structure_trait;
+
+template <>
+struct brace_structure_trait<brace>
+{
+    static constexpr auto left  = lexeme::LeftBrace;
+    static constexpr auto right = lexeme::RightBrace;
+};
+
+template <>
+struct brace_structure_trait<bracket>
+{
+    static constexpr auto left  = lexeme::LeftBracket;
+    static constexpr auto right = lexeme::RightBracket;
+};
+
+template <>
+struct brace_structure_trait<paren>
+{
+    static constexpr auto left  = lexeme::LeftParen;
+    static constexpr auto right = lexeme::RightParen;
+};
+
+}
+
+namespace braces_tracker
+{
+
+template <BraceStructure Brace>
+using trait = brace_structure_trait<Brace>;
+
+namespace
+{
+
+template <typename T>
+concept BraceOrGlobal = BraceStructure<T> || std::same_as<T, node_list>;
+
+template <BraceOrGlobal Brace>
+auto track_braces(const token*& it, const token* last, token left, std::vector<error_entry>& errors) -> Brace
+// pre(it < last)
+{
+    auto angles = std::vector<std::size_t>{};
+    auto nodes  = node_list{};
+    for (; it < last; ++it) {
+        auto&& [view, pos, type] = *it;
+        if (type == lexeme::LeftBrace || type == lexeme::LeftBracket || type == lexeme::LeftParen) {
+            auto left = *it;
+            ++it;
+            if (type == lexeme::LeftBrace) {
+                nodes.emplace_back(track_braces<brace>(it, last, left, errors));
+            } else if (type == lexeme::LeftBracket) {
+                nodes.emplace_back(track_braces<bracket>(it, last, left, errors));
+            } else if (type == lexeme::LeftParen) {
+                nodes.emplace_back(track_braces<paren>(it, last, left, errors));
+            }
+        } else if (type == lexeme::RightBrace || type == lexeme::RightBracket || type == lexeme::RightParen) {
+            if constexpr (std::same_as<Brace, node_list>) {
+                errors.push_back({
+                    .where    = pos,
+                    .message  = std::format("unexpected `{}`", _as<std::string>(type)),
+                    .fallback = true,
+                });
+                nodes.emplace_back(*it);
+            } else {
+                if (type == trait<Brace>::right) {
+                    return {
+                        .left  = left,
+                        .right = *it,
+                        .nodes = nodes,
+                    };
+                } else {
+                    errors.push_back({
+                        .where    = pos,
+                        .message  = std::format("expected `{}`, but `{}` found",
+                                               _as<std::string>(trait<Brace>::right),
+                                               _as<std::string>(type)),
+                        .fallback = true,
+                    });
+                    nodes.emplace_back(*it);
+                }
+            }
+        } else {
+            if (type == lexeme::Greater && !angles.empty()) {
+                auto i = angles.back();
+                angles.pop_back();
+                auto in_angle = node_list{};
+                in_angle.append_range(nodes | views::drop(i + 1uz));
+                nodes.erase(nodes.begin() + (i + 1uz), nodes.end());
+                auto left = std::get<token>(nodes.back());
+                nodes.pop_back();
+                nodes.emplace_back(angle{
+                    .left  = left,
+                    .right = *it,
+                    .nodes = std::move(in_angle),
+                });
+            } else {
+                if (type == lexeme::Less) {
+                    angles.emplace_back(nodes.size());
+                } else if (type == lexeme::Semicolon) {
+                    angles.clear();
+                }
+                nodes.emplace_back(*it);
+            }
+        }
+    }
+    if constexpr (std::same_as<Brace, node_list>) {
+        return nodes;
+    } else {
+        auto back  = std::prev(last);
+        auto pos   = back->pos;
+        pos.colno += back->view.size();
+        errors.push_back({
+            .where    = std::prev(last)->pos,
+            .message  = std::format("expected `{}`, but not found", _as<std::string>(trait<Brace>::right)),
+            .fallback = true,
+        });
+        return {
+            .left  = left,
+            .right = {.view = "(Error)", .pos = pos, .type = lexeme::None},
+            .nodes = std::move(nodes),
+        };
+    }
+}
+
+}
+
+}
+
+export auto track_braces(std::span<const token> tokens, std::vector<error_entry>& errors) -> braces_tracker::node_list
+{
+    using namespace braces_tracker;
+    auto first = tokens.begin().base();
+    auto last  = tokens.end().base();
+    return track_braces<node_list>(first, last, {.view = "(Internal-Error)", .pos = {}, .type = lexeme::None}, errors);
+}
+
 }
 
 // template <>
