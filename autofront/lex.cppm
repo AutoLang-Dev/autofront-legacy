@@ -783,7 +783,6 @@ auto track_braces(const token*& it, const token* last, token left, std::vector<e
                 if (last_token != std::numeric_limits<std::size_t>::max() && last_token + 1uz == nodes.size()) {
                     auto& prev_token = std::get<token>(nodes.back());
                     if (prev_token.view.end() == view.begin()) {
-                        std::println("{} {} may be merged", _as<std::string>(prev_token.type), _as<std::string>(type));
                         auto merge = [&](lexeme prev, lexeme current, lexeme merged) {
                             if (prev_token.type == prev && type == current) {
                                 prev_token.view = {prev_token.view.begin(), view.end()};
