@@ -258,6 +258,30 @@ auto lex_line(std::string_view line,
         peeks[i] = peek(i);
     }
 
+    auto parse_escape = [&](decltype(it) first) -> std::pair<decltype(it), std::string>
+    // pre(*first == '\\')
+    {
+        auto after_first = ranges::next(first);
+        if ("'\"?\\abfnrtv"sv.contains(*after_first)) {
+            return {ranges::next(first, 2uz), {}};
+        } else if ("oxun"sv.contains(*after_first)) {
+            auto after_after = ranges::next(after_first);
+            if (*after_after != '{') {
+                return {after_after, std::format("expected a \"{{\", but {:?} found", *after_after)};
+            }
+            for (; after_after < bound && *after_after != '}'; ++after_after) {
+                if (after_after + 1uz == bound) {
+                    return {after_after + 1uz, R"(expected a "}" before the end of line)"};
+                }
+                if (*after_after == '\'') {
+                    return {after_after, R"(expected a "}" before the closing "'")"};
+                }
+            }
+            return {ranges::next(after_after), {}};
+        }
+        return {first, std::format("unexpected a {:?}, not a legal escape sequence", *after_first)};
+    };
+
     auto iter_next = [&](std::size_t n = 1uz) {
         colno += n;
         ranges::advance(it, n);
@@ -588,15 +612,33 @@ auto lex_line(std::string_view line,
                         return false;
                     }
                     store2(ranges::next(iter), lexeme::StringLiteral);
-                } else if (peeks[0] == '\'') { // 字符字面量，需要完善
+                } else if (peeks[0] == '\'') { // 字符字面量
                     if (peeks[1] == '\'') {
                         errors.push_back({.where = pos(), .message = "character literal is empty"});
                         return false;
                     }
-                    if (peeks[1] == char{} || peeks[2] != '\'') {
+                    auto missing = 0uz;
+                    if (peeks[1] == '\\') {
+                        auto [escape_end, msg] = parse_escape(std::next(it));
+                        if (!msg.empty()) {
+                            errors.push_back({
+                                .where   = next(ranges::distance(it, escape_end)),
+                                .message = std::move(msg),
+                            });
+                            return false;
+                        }
+                        if (escape_end < bound && *escape_end == '\'') {
+                            ++escape_end;
+                            store2(escape_end, lexeme::CharacterLiteral);
+                            continue;
+                        } else {
+                            missing = ranges::distance(it, escape_end);
+                        }
+                    }
+                    if (missing || peeks[1] == char{} || peeks[2] != '\'') {
                         errors.push_back({
-                            .where   = next(2uz),
-                            .message = "character literal is missing its closing `'`",
+                            .where   = next(missing ? missing : 2uz),
+                            .message = "character literal is missing its closing \"'\"",
                         });
                         return false;
                     }
