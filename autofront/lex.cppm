@@ -258,7 +258,7 @@ auto lex_line(std::string_view line,
         peeks[i] = peek(i);
     }
 
-    auto parse_escape = [&](decltype(it) first) -> std::pair<decltype(it), std::string>
+    auto parse_escape = [&](decltype(it) first, char right) -> std::pair<decltype(it), std::string>
     // pre(*first == '\\')
     {
         auto after_first = ranges::next(first);
@@ -273,8 +273,8 @@ auto lex_line(std::string_view line,
                 if (after_after + 1uz == bound) {
                     return {after_after + 1uz, R"(expected a "}" before the end of line)"};
                 }
-                if (*after_after == '\'') {
-                    return {after_after, R"(expected a "}" before the closing "'")"};
+                if (*after_after == right) {
+                    return {after_after, std::format(R"(expected a "}}" before the closing "{}")", right)};
                 }
             }
             return {ranges::next(after_after), {}};
@@ -600,12 +600,27 @@ auto lex_line(std::string_view line,
                         if (iter < bound && "fFlL"sv.contains(*iter)) ++iter;
                         store2(iter, lexeme::FloatLiteral);
                     }
-                } else if (peeks[0] == '"') { // 字符串字面量，需要完善
+                } else if (peeks[0] == '"') { // 字符串字面量
                     auto iter = ranges::next(it, 1uz, bound);
-                    for (; iter < bound && *iter != '"'; ++iter);
+                    while (iter < bound && *iter != '"') {
+                        if (*iter == '\\') {
+                            auto [escape_end, msg] = parse_escape(iter, '"');
+                            if (!msg.empty()) {
+                                errors.push_back({
+                                    .where   = next(ranges::distance(it, escape_end)),
+                                    .message = std::move(msg),
+                                });
+                                return false;
+                            }
+                            std::println("escape: {}", std::string_view{iter, escape_end});
+                            iter = escape_end;
+                        } else {
+                            ++iter;
+                        }
+                    }
                     if (iter == bound) {
                         errors.push_back({
-                            .where   = pos(),
+                            .where   = next(ranges::distance(it, iter)),
                             .message = std::format("string literal {:?} is missing its closing \"",
                                                    std::string_view{it, iter}),
                         });
@@ -619,7 +634,7 @@ auto lex_line(std::string_view line,
                     }
                     auto missing = 0uz;
                     if (peeks[1] == '\\') {
-                        auto [escape_end, msg] = parse_escape(std::next(it));
+                        auto [escape_end, msg] = parse_escape(std::next(it), '\'');
                         if (!msg.empty()) {
                             errors.push_back({
                                 .where   = next(ranges::distance(it, escape_end)),
