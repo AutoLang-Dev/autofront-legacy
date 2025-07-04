@@ -818,7 +818,12 @@ auto track_braces(const token*& it, const token* last, token left, std::vector<e
                                                _as<std::string>(type)),
                         .fallback = true,
                     });
-                    nodes.emplace_back(*it);
+                    --it;
+                    return {
+                        .left  = left,
+                        .right = {.view = "(None)", .pos = {}, .type = lexeme::None},
+                        .nodes = nodes,
+                    };
                 }
             }
         } else {
