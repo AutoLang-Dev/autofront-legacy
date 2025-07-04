@@ -118,16 +118,28 @@ auto close_paren_type(lexeme l) -> lexeme
     }
 }
 
+auto is_operator(lexeme l) -> bool
+{
+    return l <= lexeme::Not;
+}
+
+}
+
+}
+
+template <>
+struct std::formatter<autofront::lexeme, char> : public std::formatter<std::string_view, char>
+{
+    auto format(const autofront::lexeme& l, auto&& ctx) const;
+};
 
 #define AUTOFRONT_LEXEME_TO_STRING(l)                                                                                  \
-    break;                                                                                                             \
     case lexeme::l:                                                                                                    \
-        return #l
+        return std::format_to(ctx.out(), #l);
 
-template <typename T>
-    requires std::is_same_v<T, std::string>
-auto _as(lexeme l) -> std::string_view
+auto std::formatter<autofront::lexeme, char>::format(const autofront::lexeme& l, auto&& ctx) const
 {
+    using autofront::lexeme;
     switch (l) {
         AUTOFRONT_LEXEME_TO_STRING(SlashEq);
         AUTOFRONT_LEXEME_TO_STRING(Slash);
@@ -196,21 +208,14 @@ auto _as(lexeme l) -> std::string_view
         AUTOFRONT_LEXEME_TO_STRING(Cpp1MultiKeyword);
         AUTOFRONT_LEXEME_TO_STRING(Cpp2FixedType);
         AUTOFRONT_LEXEME_TO_STRING(Identifier);
-        break;
     case lexeme::None:
-        return "(NONE)";
-        break;
+        return std::format_to(ctx.out(), "(NONE)");
     default:
-        return "INTERNAL-ERROR";
+        return std::format_to(ctx.out(), "INTERNAL-ERROR");
     }
 }
 
-auto is_operator(lexeme l) -> bool
-{
-    return l <= lexeme::Not;
-}
-
-}
+export namespace autofront{
 
 struct token
 {
@@ -807,7 +812,7 @@ auto track_braces(const token*& it, const token* last, token left, std::vector<e
             if constexpr (std::same_as<Brace, node_list>) {
                 errors.push_back({
                     .where    = pos,
-                    .message  = std::format("unexpected `{}`", _as<std::string>(type)),
+                    .message  = std::format("unexpected `{}`", type),
                     .fallback = true,
                     .from     = std::source_location::current(),
                 });
@@ -823,8 +828,8 @@ auto track_braces(const token*& it, const token* last, token left, std::vector<e
                     errors.push_back({
                         .where    = pos,
                         .message  = std::format("expected `{}`, but `{}` found",
-                                               _as<std::string>(trait<Brace>::right),
-                                               _as<std::string>(type)),
+                                               trait<Brace>::right,
+                                               type),
                         .fallback = true,
                         .from     = std::source_location::current(),
                     });
@@ -887,7 +892,7 @@ auto track_braces(const token*& it, const token* last, token left, std::vector<e
         pos.colno += back->view.size();
         errors.push_back({
             .where    = std::prev(last)->pos,
-            .message  = std::format("expected `{}`, but not found", _as<std::string>(trait<Brace>::right)),
+            .message  = std::format("expected `{}`, but not found", trait<Brace>::right),
             .fallback = true,
         });
         return {
