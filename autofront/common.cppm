@@ -33,6 +33,7 @@ struct error_entry
     std::string message;
     bool internal = false;
     bool fallback = false;
+    std::source_location from;
 };
 
 auto is_start(char ch)

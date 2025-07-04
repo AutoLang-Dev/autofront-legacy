@@ -549,6 +549,7 @@ auto lex_line(std::string_view line,
                             .message =
                                 std::format("binary literal cannot be empty (0{} must be followed by binary digits)",
                                             peeks[1]),
+                            .from = std::source_location::current(),
                         });
                         return false; // 实际上可以视情况继续分析
                     }
@@ -563,6 +564,7 @@ auto lex_line(std::string_view line,
                             .message = std::format(
                                 "hexadecimal literal cannot be empty (0{} must be followed by hexadecimal digits)",
                                 peeks[1]),
+                            .from = std::source_location::current(),
                         });
                         return false;
                     }
@@ -587,6 +589,7 @@ auto lex_line(std::string_view line,
                                     .where   = pos(),
                                     .message = "a floating point literal must have at least one digit "
                                                "after the decimal point (can be '.0')",
+                                    .from    = std::source_location::current(),
                                 });
                                 return false;
                             }
@@ -609,6 +612,7 @@ auto lex_line(std::string_view line,
                                 errors.push_back({
                                     .where   = next(ranges::distance(it, escape_end)),
                                     .message = std::move(msg),
+                                    .from    = std::source_location::current(),
                                 });
                                 return false;
                             }
@@ -623,6 +627,7 @@ auto lex_line(std::string_view line,
                             .where   = next(ranges::distance(it, iter)),
                             .message = std::format("string literal {:?} is missing its closing \"",
                                                    std::string_view{it, iter}),
+                            .from    = std::source_location::current(),
                         });
                         return false;
                     }
@@ -639,6 +644,7 @@ auto lex_line(std::string_view line,
                             errors.push_back({
                                 .where   = next(ranges::distance(it, escape_end)),
                                 .message = std::move(msg),
+                                .from    = std::source_location::current(),
                             });
                             return false;
                         }
@@ -654,6 +660,7 @@ auto lex_line(std::string_view line,
                         errors.push_back({
                             .where   = next(missing ? missing : 2uz),
                             .message = "character literal is missing its closing \"'\"",
+                            .from    = std::source_location::current(),
                         });
                         return false;
                     }
@@ -666,7 +673,8 @@ auto lex_line(std::string_view line,
                     errors.push_back({
                         .where    = pos(),
                         .message  = std::format("unexcepted text {:?}", peeks[0]),
-                        .fallback = true // a noisy fallback error message // from cppfront
+                        .fallback = true, // a noisy fallback error message // from cppfront
+                        .from     = std::source_location::current(),
                     });
                     return false;
                 }
@@ -801,6 +809,7 @@ auto track_braces(const token*& it, const token* last, token left, std::vector<e
                     .where    = pos,
                     .message  = std::format("unexpected `{}`", _as<std::string>(type)),
                     .fallback = true,
+                    .from     = std::source_location::current(),
                 });
                 nodes.emplace_back(*it);
             } else {
@@ -817,6 +826,7 @@ auto track_braces(const token*& it, const token* last, token left, std::vector<e
                                                _as<std::string>(trait<Brace>::right),
                                                _as<std::string>(type)),
                         .fallback = true,
+                        .from     = std::source_location::current(),
                     });
                     --it;
                     return {
