@@ -749,7 +749,49 @@ export namespace braces_tracker
 {
 
 template <typename T>
-concept BraceStructure = std::same_as<T, brace> || std::same_as<T, bracket> || std::same_as<T, paren>;
+concept BraceStructure =
+    std::same_as<T, brace> || std::same_as<T, bracket> || std::same_as<T, paren> || std::same_as<T, angle>;
+
+enum struct kind : std::uint8_t
+{
+    token,
+    brace,
+    bracket,
+    paren,
+    angle
+};
+
+auto kind_of(const token&) -> kind
+{
+    return kind::token;
+}
+
+auto kind_of(const brace&) -> kind
+{
+    return kind::brace;
+}
+
+auto kind_of(const bracket&) -> kind
+{
+    return kind::bracket;
+}
+
+auto kind_of(const paren&) -> kind
+{
+    return kind::paren;
+}
+
+auto kind_of(const angle&) -> kind
+{
+    return kind::angle;
+}
+
+auto kind_of(const node& n) -> kind
+{
+    return n.visit([](auto& x) {
+        return kind_of(x);
+    });
+}
 
 template <BraceStructure Brace>
 struct brace_structure_trait;
