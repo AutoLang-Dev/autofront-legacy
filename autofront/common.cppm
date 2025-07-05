@@ -46,6 +46,9 @@ auto is_continue(char ch)
     return is_start(ch) || std::isdigit(ch);
 }
 
+template<class... Ts>
+struct overloaded : Ts... { using Ts::operator()...; };
+
 }
 
 template <>
