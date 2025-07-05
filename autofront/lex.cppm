@@ -857,19 +857,21 @@ auto track_braces(const token*& it, const token* last, token left, std::vector<e
             } else {
                 auto has_merged = false;
                 if (last_token != std::numeric_limits<std::size_t>::max() && last_token + 1uz == nodes.size()) {
-                    auto& prev_token = std::get<token>(nodes.back());
-                    if (prev_token.view.end() == view.begin()) {
-                        auto merge = [&](lexeme prev, lexeme current, lexeme merged) {
-                            if (prev_token.type == prev && type == current) {
-                                prev_token.view = {prev_token.view.begin(), view.end()};
-                                prev_token.type = merged;
-                                has_merged      = true;
-                            }
-                        };
-                        merge(lexeme::Greater, lexeme::Greater, lexeme::RightShift);
-                        merge(lexeme::Greater, lexeme::Assignment, lexeme::GreaterEq);
-                        merge(lexeme::RightShift, lexeme::Assignment, lexeme::RightShiftEq);
-                    }
+                    auto merger = [&](token& prev_token) {
+                        if (prev_token.view.end() == view.begin()) {
+                            auto merge = [&](lexeme prev, lexeme current, lexeme merged) {
+                                if (prev_token.type == prev && type == current) {
+                                    prev_token.view = {prev_token.view.begin(), view.end()};
+                                    prev_token.type = merged;
+                                    has_merged      = true;
+                                }
+                            };
+                            merge(lexeme::Greater, lexeme::Greater, lexeme::RightShift);
+                            merge(lexeme::Greater, lexeme::Assignment, lexeme::GreaterEq);
+                            merge(lexeme::RightShift, lexeme::Assignment, lexeme::RightShiftEq);
+                        }
+                    };
+                    nodes.back().visit(overloaded{merger, [](auto&&) {}});
                 }
                 if (!has_merged) {
                     if (type == lexeme::Less) {
