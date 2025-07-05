@@ -774,6 +774,13 @@ struct brace_structure_trait<paren>
     static constexpr auto right = lexeme::RightParen;
 };
 
+template <>
+struct brace_structure_trait<angle>
+{
+    static constexpr auto left  = lexeme::Less;
+    static constexpr auto right = lexeme::Greater;
+};
+
 }
 
 namespace braces_tracker
