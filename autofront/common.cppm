@@ -10,8 +10,8 @@ export namespace autofront
 
 struct source_position
 {
-    std::size_t lineno = 1uz;
-    std::size_t colno  = 1uz;
+    std::size_t lineno = 0uz;
+    std::size_t colno  = 0uz;
 };
 
 struct comment
