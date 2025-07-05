@@ -215,7 +215,8 @@ auto std::formatter<autofront::lexeme, char>::format(const autofront::lexeme& l,
     }
 }
 
-export namespace autofront{
+export namespace autofront
+{
 
 struct token
 {
@@ -833,9 +834,7 @@ auto track_braces(const token*& it, const token* last, token left, std::vector<e
                 } else {
                     errors.push_back({
                         .where    = pos,
-                        .message  = std::format("expected `{}`, but `{}` found",
-                                               trait<Brace>::right,
-                                               type),
+                        .message  = std::format("expected `{}`, but `{}` found", trait<Brace>::right, type),
                         .fallback = true,
                         .from     = std::source_location::current(),
                     });
