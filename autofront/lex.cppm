@@ -621,7 +621,6 @@ auto lex_line(std::string_view line,
                                 });
                                 return false;
                             }
-                            std::println("escape: {}", std::string_view{iter, escape_end});
                             iter = escape_end;
                         } else {
                             ++iter;
