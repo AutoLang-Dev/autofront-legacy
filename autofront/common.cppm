@@ -199,6 +199,21 @@ auto ignore_error(std::expected<T, E> r) -> std::optional<T>
     }
 }
 
+template <typename T>
+struct remove_rval_cref
+{
+    using type = T;
+};
+
+template <typename T>
+struct remove_rval_cref<T&&>
+{
+    using type = std::remove_const_t<T>;
+};
+
+template <typename T>
+using remove_rval_cref_t = remove_rval_cref<T>::type;
+
 }
 
 template <>
