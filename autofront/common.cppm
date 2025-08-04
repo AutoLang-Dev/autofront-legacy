@@ -189,6 +189,16 @@ private:
     coroutine_handle h_;
 };
 
+template <typename T, typename E>
+auto ignore_error(std::expected<T, E> r) -> std::optional<T>
+{
+    if (r.has_value()) {
+        return std::optional{std::move(r).value()};
+    } else {
+        return std::nullopt;
+    }
+}
+
 }
 
 template <>
