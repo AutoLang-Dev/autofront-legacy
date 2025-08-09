@@ -223,6 +223,11 @@ struct token
     std::string_view view;
     source_position pos;
     lexeme type;
+
+    auto span() const -> source_span
+    {
+        return source_span::make(pos, view.size());
+    }
 };
 
 auto lex_line(std::string_view line,

@@ -12,6 +12,36 @@ struct source_position
 {
     std::size_t lineno = 0uz;
     std::size_t colno  = 0uz;
+
+    constexpr auto next(std::size_t n) const -> source_position
+    {
+        return {
+            .lineno = lineno,
+            .colno  = colno + n,
+        };
+    }
+};
+
+struct source_span
+{
+    source_position start;
+    source_position end;
+
+    static constexpr auto make(source_position pos, std::size_t n) -> source_span
+    {
+        return {
+            .start = pos,
+            .end   = pos.next(n),
+        };
+    }
+
+    static constexpr auto make(source_span first, source_span last) -> source_span
+    {
+        return {
+            .start = first.start,
+            .end   = last.end,
+        };
+    }
 };
 
 struct comment
@@ -46,8 +76,11 @@ auto is_continue(char ch)
     return is_start(ch) || std::isdigit(ch);
 }
 
-template<class... Ts>
-struct overloaded : Ts... { using Ts::operator()...; };
+template <class... Ts>
+struct overloaded : Ts...
+{
+    using Ts::operator()...;
+};
 
 template <typename Promise = void>
 struct unique_coro
