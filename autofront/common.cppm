@@ -13,6 +13,9 @@ struct source_position
     std::size_t lineno = 0uz;
     std::size_t colno  = 0uz;
 
+    friend constexpr auto operator==(source_position, source_position) noexcept -> bool = default;
+    friend constexpr auto operator<=>(source_position, source_position) noexcept        = default;
+
     constexpr auto next(std::size_t n) const -> source_position
     {
         return {
