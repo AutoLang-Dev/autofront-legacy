@@ -255,10 +255,6 @@ auto lex_line(std::string_view line,
     auto pos = [&] {
         return source_position{.lineno = lineno, .colno = colno};
     };
-    auto prev = [&](std::size_t n) {
-        [[assume(n < colno)]];
-        return source_position{.lineno = lineno, .colno = colno - n};
-    };
     auto next = [&](std::size_t n) {
         // [[assume(...)]];
         return source_position{.lineno = lineno, .colno = colno + n};
@@ -308,7 +304,7 @@ auto lex_line(std::string_view line,
         std::shift_left(peeks.begin(), peeks.end(), n);
         // for (auto&& [p, i] : peeks | views::enumerate | views::reverse | views::take(n)) {
         for (auto i = peeks.size() - 1uz; auto&& p : peeks | views::reverse | views::take(n)) {
-            peeks[i] = peek(i);
+            p = peek(i);
             --i;
         }
     };
@@ -595,7 +591,7 @@ auto lex_line(std::string_view line,
                 } else if (std::isdigit(peeks[0])) { // 数字字面量，需要完善
                     auto iter = ranges::next(it, 1uz, bound);
                     for (; iter < bound && (std::isdigit(*iter) || *iter == '\''); ++iter);
-                    if ((*iter != '.' || (iter + 1 == bound && std::isdigit(iter[1])) && !"eEfF"sv.contains(*iter))) {
+                    if ((*iter != '.' || (iter + 1 == bound && std::isdigit(iter[1]))) && !"eEfF"sv.contains(*iter)) {
                         if (iter < bound && "uU"sv.contains(*iter)) ++iter;
                         if (iter < bound && "lL"sv.contains(*iter)) ++iter;
                         if (iter < bound && "lL"sv.contains(*iter)) ++iter;
