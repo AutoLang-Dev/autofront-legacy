@@ -1003,6 +1003,9 @@ auto build_token_tree(std::span<const token> tokens, std::vector<error_entry>& e
             auto [text, pos, type] = cur_tok;
 
             if (lefts.contains(type)) {
+                if (type == lexeme::LeftBrace) {
+                    angles.clear();
+                }
                 trees.push_back(build(lefts.at(type)));
             } else if (rights.contains(type)) {
                 trees.emplace_back(cur_tok.span(), type, text);
