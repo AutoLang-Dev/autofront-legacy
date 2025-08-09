@@ -57,6 +57,8 @@ enum struct lexeme : std::uint8_t
     RightParen,
     LeftBracket,
     RightBracket,
+    LeftAngle,
+    RightAngle,
     Scope,
     Colon,
     Semicolon,
@@ -80,7 +82,8 @@ enum struct lexeme : std::uint8_t
     Cpp1MultiKeyword,
     Cpp2FixedType,
     Identifier,
-    None = 127
+    Group = 126,
+    None  = 127,
 };
 
 auto is_literal(lexeme l) -> bool
@@ -112,6 +115,9 @@ auto close_paren_type(lexeme l) -> lexeme
         break;
     case lexeme::LeftParen:
         return lexeme::RightParen;
+        break;
+    case lexeme::LeftAngle:
+        return lexeme::RightAngle;
         break;
     default:
         return lexeme::None;
@@ -185,6 +191,8 @@ auto std::formatter<autofront::lexeme, char>::format(const autofront::lexeme& l,
         AUTOFRONT_LEXEME_TO_STRING(RightParen);
         AUTOFRONT_LEXEME_TO_STRING(LeftBracket);
         AUTOFRONT_LEXEME_TO_STRING(RightBracket);
+        AUTOFRONT_LEXEME_TO_STRING(LeftAngle);
+        AUTOFRONT_LEXEME_TO_STRING(RightAngle);
         AUTOFRONT_LEXEME_TO_STRING(Scope);
         AUTOFRONT_LEXEME_TO_STRING(Colon);
         AUTOFRONT_LEXEME_TO_STRING(Semicolon);
@@ -698,275 +706,385 @@ auto lex_line(std::string_view line,
     return tokens.size() != origial_size;
 }
 
-// AutoFront 同样需要括号跟踪器
-// 但与 Cpp2 不同的是，该括号跟踪器是为了更好地解析模板尖括号，并抽象出一些利于后续分析的结构
-namespace braces_tracker
+struct token_tree
 {
+public:
+    struct token
+    {
+    private:
+        source_span span_;
+        lexeme type_;
+        std::string_view text_;
 
-struct brace;
+    public:
+        token(source_span span, lexeme type, std::string_view text) : span_{span}, type_{type}, text_{text} {}
 
-struct bracket;
+        auto span() const -> source_span
+        {
+            return span_;
+        }
 
-struct paren;
+        auto set_span(source_span span) -> void
+        {
+            span_ = span;
+        }
 
-struct angle;
+        auto type() const -> lexeme
+        {
+            return type_;
+        }
 
-using node = std::variant<token, brace, bracket, paren, angle>;
+        auto set_type(lexeme type) -> void
+        {
+            type_ = type;
+        }
 
-using node_list = std::vector<node>;
+        auto text() const -> std::string_view
+        {
+            return text_;
+        }
 
-struct brace
-{
-    token left;
-    token right;
-    node_list nodes;
-};
+        auto set_text(std::string_view text) -> void
+        {
+            text_ = text;
+        }
+    };
 
-struct bracket
-{
-    token left;
-    token right;
-    node_list nodes;
-};
+    struct group
+    {
+        enum struct delimiter : std::uint8_t
+        {
+            none,
+            paren,
+            bracket,
+            brace,
+            angle,
+        };
 
-struct paren
-{
-    token left;
-    token right;
-    node_list nodes;
-};
+    private:
+        source_span open_;
+        source_span close_;
+        delimiter delim_;
+        std::vector<token_tree> children_;
 
-struct angle
-{
-    token left;
-    token right;
-    node_list nodes;
-};
+    public:
+        group(source_span open, source_span close, delimiter delim, std::vector<token_tree> children)
+            : open_{open}, close_{close}, delim_{delim}, children_{std::move(children)}
+        {
+        }
 
-}
+        auto span() const -> source_span
+        {
+            return source_span::make(open_, close_);
+        }
 
-}
+        auto open() const -> source_span
+        {
+            return open_;
+        }
 
-namespace autofront
-{
+        auto close() const -> source_span
+        {
+            return close_;
+        }
 
-export namespace braces_tracker
-{
+        auto delim() const -> delimiter
+        {
+            return delim_;
+        }
 
-template <typename T>
-concept BraceStructure =
-    std::same_as<T, brace> || std::same_as<T, bracket> || std::same_as<T, paren> || std::same_as<T, angle>;
+        auto children() -> std::span<token_tree>
+        {
+            return children_;
+        }
 
-enum struct kind : std::uint8_t
-{
-    token,
-    brace,
-    bracket,
-    paren,
-    angle
-};
+        auto children() const -> std::span<const token_tree>
+        {
+            return children_;
+        }
 
-auto kind_of(const token&) -> kind
-{
-    return kind::token;
-}
-
-auto kind_of(const brace&) -> kind
-{
-    return kind::brace;
-}
-
-auto kind_of(const bracket&) -> kind
-{
-    return kind::bracket;
-}
-
-auto kind_of(const paren&) -> kind
-{
-    return kind::paren;
-}
-
-auto kind_of(const angle&) -> kind
-{
-    return kind::angle;
-}
-
-auto kind_of(const node& n) -> kind
-{
-    return n.visit([](auto& x) {
-        return kind_of(x);
-    });
-}
-
-template <BraceStructure Brace>
-struct brace_structure_trait;
-
-template <>
-struct brace_structure_trait<brace>
-{
-    static constexpr auto left  = lexeme::LeftBrace;
-    static constexpr auto right = lexeme::RightBrace;
-};
-
-template <>
-struct brace_structure_trait<bracket>
-{
-    static constexpr auto left  = lexeme::LeftBracket;
-    static constexpr auto right = lexeme::RightBracket;
-};
-
-template <>
-struct brace_structure_trait<paren>
-{
-    static constexpr auto left  = lexeme::LeftParen;
-    static constexpr auto right = lexeme::RightParen;
-};
-
-template <>
-struct brace_structure_trait<angle>
-{
-    static constexpr auto left  = lexeme::Less;
-    static constexpr auto right = lexeme::Greater;
-};
-
-}
-
-namespace braces_tracker
-{
-
-template <BraceStructure Brace>
-using trait = brace_structure_trait<Brace>;
-
-namespace
-{
-
-template <typename T>
-concept BraceOrGlobal = BraceStructure<T> || std::same_as<T, node_list>;
-
-template <BraceOrGlobal Brace>
-auto track_braces(const token*& it, const token* last, token left, std::vector<error_entry>& errors) -> Brace
-// pre(it < last)
-{
-    auto angles     = std::vector<std::size_t>{};
-    auto nodes      = node_list{};
-    auto last_token = std::numeric_limits<std::size_t>::max();
-    for (; it < last; ++it) {
-        auto [view, pos, type] = *it;
-        if (type == lexeme::LeftBrace || type == lexeme::LeftBracket || type == lexeme::LeftParen) {
-            auto left = *it;
-            ++it;
-            if (type == lexeme::LeftBrace) {
-                nodes.emplace_back(track_braces<brace>(it, last, left, errors));
-            } else if (type == lexeme::LeftBracket) {
-                nodes.emplace_back(track_braces<bracket>(it, last, left, errors));
-            } else if (type == lexeme::LeftParen) {
-                nodes.emplace_back(track_braces<paren>(it, last, left, errors));
+        auto children(std::size_t i) -> token_tree*
+        {
+            if (!(i < children_.size())) {
+                return nullptr;
             }
-        } else if (type == lexeme::RightBrace || type == lexeme::RightBracket || type == lexeme::RightParen) {
-            if constexpr (std::same_as<Brace, node_list>) {
-                errors.push_back({
-                    .where    = pos,
-                    .message  = std::format("unexpected `{}`", type),
-                    .fallback = true,
-                    .from     = std::source_location::current(),
-                });
-                nodes.emplace_back(*it);
-            } else {
-                if (type == trait<Brace>::right) {
+            return &children_[i];
+        }
+
+        auto children(std::size_t i) const -> const token_tree*
+        {
+            if (!(i < children_.size())) {
+                return nullptr;
+            }
+            return &children_[i];
+        }
+    };
+
+    enum struct kind : std::uint8_t
+    {
+        none,
+        token,
+        group,
+    };
+
+private:
+    kind kind_;
+    union
+    {
+        std::unique_ptr<token> token_;
+        std::unique_ptr<group> group_;
+    };
+
+    auto remove()
+    {
+        if (kind_ == kind::token) {
+            std::destroy_at(&token_);
+        } else if (kind_ == kind::group) {
+            std::destroy_at(&group_);
+        }
+        kind_ = kind::none;
+    }
+
+    auto setup(std::unique_ptr<token> t)
+    {
+        remove();
+        kind_ = kind::token;
+        std::construct_at(&token_, std::move(t));
+    }
+
+    auto setup(std::unique_ptr<group> g)
+    {
+        remove();
+        kind_ = kind::group;
+        std::construct_at(&group_, std::move(g));
+    }
+
+public:
+    using delimiter = group::delimiter;
+
+    token_tree() : kind_{kind::none} {}
+
+    token_tree(std::unique_ptr<token> t) : kind_{kind::token}
+    {
+        std::construct_at(&token_, std::move(t));
+    }
+
+    token_tree(std::unique_ptr<group> g) : kind_{kind::group}
+    {
+        std::construct_at(&group_, std::move(g));
+    }
+
+    token_tree(source_span span, lexeme type, std::string_view text)
+        : token_tree{std::make_unique<token>(span, type, text)}
+    {
+    }
+
+    token_tree(source_span open, source_span close, group::delimiter delim, std::vector<token_tree> children)
+        : token_tree(std::make_unique<group>(open, close, delim, std::move(children)))
+    {
+    }
+
+    token_tree(const token_tree&) noexcept = delete;
+    token_tree(token_tree&& other) noexcept : kind_(other.kind_)
+    {
+        if (kind_ == kind::token) {
+            std::construct_at(&token_, other.take_token());
+        } else if (kind_ == kind::group) {
+            std::construct_at(&group_, other.take_group());
+        }
+    }
+
+    auto operator=(const token_tree&) noexcept -> token_tree& = delete;
+    auto operator=(token_tree&& rhs) noexcept -> token_tree&
+    {
+        remove();
+        kind_ = rhs.kind_;
+        if (kind_ == kind::token) {
+            setup(rhs.take_token());
+        } else if (kind_ == kind::group) {
+            setup(rhs.take_group());
+        }
+        return *this;
+    }
+
+    ~token_tree()
+    {
+        remove();
+    }
+
+    auto get_kind() const -> kind
+    {
+        return kind_;
+    }
+
+    auto span() const -> source_span
+    {
+        if (kind_ == kind::token) {
+            return token_->span();
+        } else if (kind_ == kind::group) {
+            return group_->span();
+        } else {
+            return {};
+        }
+    }
+
+    auto get_token() const -> token*
+    {
+        if (kind_ != kind::token) {
+            return nullptr;
+        }
+        return token_.get();
+    }
+
+    auto get_group() const -> group*
+    {
+        if (kind_ != kind::group) {
+            return nullptr;
+        }
+        return group_.get();
+    }
+
+    auto take_token() -> std::unique_ptr<token>
+    {
+        if (kind_ != kind::token) {
+            return nullptr;
+        }
+        return std::move(token_);
+    }
+
+    auto take_group() -> std::unique_ptr<group>
+    {
+        if (kind_ != kind::group) {
+            return nullptr;
+        }
+        return std::move(group_);
+    }
+};
+
+auto build_token_tree(std::span<const token> tokens, std::vector<error_entry>& errors) -> token_tree
+{
+    static const auto lefts = std::map<lexeme, token_tree::delimiter>{
+        {lexeme::LeftBrace,   token_tree::delimiter::brace  },
+        {lexeme::LeftBracket, token_tree::delimiter::bracket},
+        {lexeme::LeftParen,   token_tree::delimiter::paren  },
+        {lexeme::LeftAngle,   token_tree::delimiter::angle  },
+    };
+    static const auto rights = std::map<lexeme, token_tree::delimiter>{
+        {lexeme::RightBrace,   token_tree::delimiter::brace  },
+        {lexeme::RightBracket, token_tree::delimiter::bracket},
+        {lexeme::RightParen,   token_tree::delimiter::paren  },
+        {lexeme::RightAngle,   token_tree::delimiter::angle  },
+    };
+
+    if (tokens.empty()) {
+        return {};
+    }
+    auto last_pos = tokens.back().span().end;
+
+    auto next = [&tokens](std::size_t n = 1uz) {
+        tokens = tokens.subspan(n);
+    };
+    auto build = [&](this auto&& build, token_tree::delimiter delim) -> token_tree {
+        auto angles = std::vector<std::size_t>{};
+        auto trees  = std::vector<token_tree>{};
+        if (delim != token_tree::delimiter::none) {
+            // contract_assert(!tokens.empty());
+
+            auto&& cur_tok = tokens.front();
+
+            auto [text, pos, type] = cur_tok;
+            // contract_assert(lefts.contains(type) && lefts.at(type) == delim);
+            trees.emplace_back(cur_tok.span(), type, text);
+            next();
+        }
+        for (; !tokens.empty(); next()) {
+            auto&& cur_tok = tokens.front();
+
+            auto [text, pos, type] = cur_tok;
+
+            if (lefts.contains(type)) {
+                trees.push_back(build(lefts.at(type)));
+            } else if (rights.contains(type)) {
+                trees.emplace_back(cur_tok.span(), type, text);
+                if (rights.at(type) == delim) {
                     return {
-                        .left  = left,
-                        .right = *it,
-                        .nodes = nodes,
+                        trees.front().span(),
+                        trees.back().span(),
+                        delim,
+                        std::move(trees),
                     };
                 } else {
                     errors.push_back({
-                        .where    = pos,
-                        .message  = std::format("expected `{}`, but `{}` found", trait<Brace>::right, type),
-                        .fallback = true,
-                        .from     = std::source_location::current(),
+                        .where   = trees.back().span().start,
+                        .message = std::format("unexcepted {}", type),
+                        .from    = std::source_location::current(),
                     });
-                    --it;
-                    return {
-                        .left  = left,
-                        .right = {.view = "(None)", .pos = {}, .type = lexeme::None},
-                        .nodes = nodes,
-                    };
                 }
-            }
-        } else {
-            if (type == lexeme::Greater && !angles.empty()) {
-                auto i = angles.back();
-                angles.pop_back();
-                auto in_angle = node_list{};
-                in_angle.append_range(nodes | views::drop(i + 1uz));
-                nodes.erase(nodes.begin() + (i + 1uz), nodes.end());
-                auto left = std::get<token>(nodes.back());
-                nodes.pop_back();
-                nodes.emplace_back(angle{
-                    .left  = left,
-                    .right = *it,
-                    .nodes = std::move(in_angle),
-                });
             } else {
-                auto has_merged = false;
-                if (last_token != std::numeric_limits<std::size_t>::max() && last_token + 1uz == nodes.size()) {
-                    auto merger = [&](token& prev_token) {
-                        if (prev_token.view.end() == view.begin()) {
-                            auto merge = [&](lexeme prev, lexeme current, lexeme merged) {
-                                if (prev_token.type == prev && type == current) {
-                                    prev_token.view = {prev_token.view.begin(), view.end()};
-                                    prev_token.type = merged;
-                                    has_merged      = true;
-                                }
-                            };
-                            merge(lexeme::Greater, lexeme::Greater, lexeme::RightShift);
-                            merge(lexeme::Greater, lexeme::Assignment, lexeme::GreaterEq);
-                            merge(lexeme::RightShift, lexeme::Assignment, lexeme::RightShiftEq);
+                if (type == lexeme::Greater && !angles.empty()) {
+                    auto idx = angles.back();
+                    angles.pop_back();
+                    auto in_angle = std::vector<token_tree>{
+                        std::from_range,
+                        trees | views::drop(idx) | views::as_rvalue,
+                    };
+                    trees.resize(idx);
+                    // contract_assert(in_angle.front().get_token());
+                    in_angle.front().get_token()->set_type(lexeme::LeftAngle);
+                    in_angle.emplace_back(cur_tok.span(), lexeme::RightAngle, text);
+
+                    trees.emplace_back(in_angle.front().span(),
+                                       in_angle.back().span(),
+                                       token_tree::delimiter::angle,
+                                       std::move(in_angle));
+                } else {
+                    auto merge = [&](lexeme prev, lexeme cur, lexeme merged) {
+                        if (trees.empty()) return;
+                        if (type != cur) return;
+                        if (auto prev_tok = trees.back().get_token()) {
+                            if (prev_tok->type() != prev) return;
+                            if (prev_tok->span().end != pos) return;
+                            text = {prev_tok->text().begin(), text.end()};
+                            pos  = prev_tok->span().start;
+                            type = merged;
+                            trees.pop_back();
                         }
                     };
-                    nodes.back().visit(overloaded{merger, [](auto&&) {}});
-                }
-                if (!has_merged) {
+                    merge(lexeme::Greater, lexeme::Greater, lexeme::RightShift);
+                    merge(lexeme::Greater, lexeme::Assignment, lexeme::GreaterEq);
+                    merge(lexeme::RightShift, lexeme::Assignment, lexeme::RightShiftEq);
                     if (type == lexeme::Less) {
-                        angles.emplace_back(nodes.size());
-                    } else if (type == lexeme::Semicolon) {
+                        angles.emplace_back(trees.size());
+                    }
+                    if (type == lexeme::Semicolon) {
                         angles.clear();
                     }
-                    last_token = nodes.size();
-                    nodes.emplace_back(*it);
+                    trees.emplace_back(cur_tok.span(), type, text);
                 }
             }
         }
-    }
-    if constexpr (std::same_as<Brace, node_list>) {
-        return nodes;
-    } else {
-        auto back  = std::prev(last);
-        auto pos   = back->pos;
-        pos.colno += back->view.size();
-        errors.push_back({
-            .where    = std::prev(last)->pos,
-            .message  = std::format("expected `{}`, but not found", trait<Brace>::right),
-            .fallback = true,
-        });
+        if (delim != token_tree::delimiter::none) {
+            auto expected = [&] {
+                for (auto [k, v] : rights) {
+                    if (v == delim) return k;
+                }
+                std::unreachable();
+            }();
+            errors.push_back({
+                .where   = last_pos,
+                .message = std::format("excepted {}", expected),
+                .from    = std::source_location::current(),
+            });
+            return {};
+        }
         return {
-            .left  = left,
-            .right = {.view = "(Error)", .pos = pos, .type = lexeme::None},
-            .nodes = std::move(nodes),
+            source_span::make(trees.front().span().start, 0uz),
+            source_span::make(last_pos, 0uz),
+            delim,
+            std::move(trees),
         };
-    }
-}
-
-}
-
-}
-
-export auto track_braces(std::span<const token> tokens, std::vector<error_entry>& errors) -> braces_tracker::node_list
-{
-    using namespace braces_tracker;
-    auto first = tokens.begin().base();
-    auto last  = tokens.end().base();
-    return track_braces<node_list>(first, last, {.view = "(Internal-Error)", .pos = {}, .type = lexeme::None}, errors);
+    };
+    return build(token_tree::delimiter::none);
 }
 
 }
