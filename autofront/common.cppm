@@ -5,6 +5,26 @@ import std;
 namespace ranges = std::ranges;
 namespace views  = std::views;
 
+struct char_range
+{
+    char32_t start;
+    char32_t end;
+};
+
+// 属于 Unicode XID_Start 的字符
+constexpr auto xid_starts = std::array{
+    char_range{.start = U'\u{41}', .end = U'\u{5A}'},
+    char_range{.start = U'\u{61}', .end = U'\u{7A}'},
+    // ...
+};
+
+// 属于 XID_Continue 但不属于 XID_Start 的字符
+constexpr auto xid_continues_delta = std::array{
+    char_range{.start = U'\u{30}', .end = U'\u{39}'},
+    char_range{.start = U'\u{5F}', .end = U'\u{5F}'},
+    // ...
+};
+
 export namespace autofront
 {
 
@@ -69,14 +89,36 @@ struct error_entry
     std::source_location from;
 };
 
-auto is_start(char ch)
+// Unicode XID
+enum struct xid : std::uint8_t
 {
-    return std::isalpha(ch) || ch == '_';
+    None,
+    Start,
+    Continue,
+};
+
+auto get_xid(char32_t ch) -> xid
+{
+    auto lower_bound = [ch](std::span<const char_range> db) {
+        auto it = ranges::lower_bound(db, ch, {}, &char_range::end);
+        if (it != db.end()) {
+            if (it->start <= ch) return true;
+        }
+        return false;
+    };
+    if (lower_bound(xid_starts)) return xid::Start;
+    if (lower_bound(xid_continues_delta)) return xid::Continue;
+    return xid::None;
 }
 
-auto is_continue(char ch)
+auto is_xid_start(char32_t ch) -> bool
 {
-    return is_start(ch) || std::isdigit(ch);
+    return get_xid(ch) != xid::None;
+}
+
+auto is_xid_continue(char32_t ch) -> bool
+{
+    return get_xid(ch) == xid::Continue;
 }
 
 template <class... Ts>
