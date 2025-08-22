@@ -267,6 +267,10 @@ private:
     coroutine_handle h_;
 };
 
+struct this_promise_t
+{
+} this_promise;
+
 template <typename T, typename E>
 auto ignore_error(std::expected<T, E> r) -> std::optional<T>
 {
