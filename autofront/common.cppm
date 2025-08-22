@@ -292,6 +292,50 @@ struct remove_rval_cref<T&&>
 template <typename T>
 using remove_rval_cref_t = remove_rval_cref<T>::type;
 
+template <typename T>
+struct just_awaitable
+{
+private:
+    using type = remove_rval_cref_t<T>;
+    type r_;
+
+public:
+    just_awaitable(type r) : r_{std::forward<decltype(r)>(r)} {}
+
+    constexpr auto await_ready() const noexcept -> bool
+    {
+        return true;
+    }
+
+    constexpr auto await_suspend(std::coroutine_handle<>) const noexcept -> void
+    {
+        std::unreachable();
+    }
+
+    constexpr auto await_resume() & noexcept -> T&
+    {
+        return r_;
+    }
+
+    constexpr auto await_resume() const& noexcept -> const T&
+    {
+        return r_;
+    }
+
+    constexpr auto await_resume() && noexcept -> T
+    {
+        return std::move(r_);
+    }
+
+    constexpr auto await_resume() const&& noexcept -> T
+    {
+        return r_;
+    }
+};
+
+template <typename T>
+just_awaitable(T x) -> just_awaitable<remove_rval_cref_t<T>>;
+
 }
 
 template <>
