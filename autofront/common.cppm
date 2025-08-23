@@ -121,6 +121,26 @@ auto is_xid_continue(char32_t ch) -> bool
     return get_xid(ch) == xid::Continue;
 }
 
+auto is_xid_none(char32_t ch) -> bool
+{
+    return get_xid(ch) == xid::None;
+};
+
+auto is_digit(char32_t ch) -> bool
+{
+    return U'0' <= ch && ch <= U'9';
+};
+
+auto is_xdigit(char32_t ch) -> bool
+{
+    return is_digit(ch) || (U'A' <= ch && ch <= U'F');
+};
+
+auto is_space(char32_t ch) -> bool
+{
+    return U"\u{9}\u{A}\u{B}\u{C}\u{20}"sv.contains(ch);
+}
+
 template <class... Ts>
 struct overloaded : Ts...
 {
