@@ -133,7 +133,7 @@ auto is_digit(char32_t ch) -> bool
 
 auto is_xdigit(char32_t ch) -> bool
 {
-    return is_digit(ch) || (U'A' <= ch && ch <= U'F');
+    return is_digit(ch) || (U'A' <= ch && ch <= U'F') || (U'a' <= ch && ch <= U'f');
 };
 
 auto is_space(char32_t ch) -> bool
