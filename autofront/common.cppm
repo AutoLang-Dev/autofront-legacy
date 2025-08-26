@@ -113,7 +113,7 @@ auto get_xid(char32_t ch) -> xid
 
 auto is_xid_start(char32_t ch) -> bool
 {
-    return get_xid(ch) != xid::None;
+    return get_xid(ch) == xid::Start;
 }
 
 auto is_xid_continue(char32_t ch) -> bool
