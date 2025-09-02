@@ -8,7 +8,7 @@ namespace views  = std::views;
 namespace
 {
 
-auto display_width(std::string_view sv)
+[[maybe_unused]] auto display_width(std::string_view sv)
 {
     auto mangled_str = std::format(".{}", sv);
     auto max_width   = mangled_str.size();
@@ -37,6 +37,47 @@ auto trim(std::string_view str) -> std::string_view
     return rtrim(ltrim(str));
 }
 
+auto utf32_to_utf8(std::u32string_view sv) -> std::string
+{
+    auto result = std::string{};
+    for (auto ch : sv) {
+        auto buf = std::array<char, 4uz>{};
+        auto end = autofront::utf::utf32_to_utf8(ch, buf.begin());
+        result.append_range(std::string_view{buf.begin(), end});
+    }
+    return result;
+}
+
+auto print_error(std::span<const std::string_view> lines, const autofront::error_entry& error)
+{
+    auto&& [where, message, internal, fallback, from] = error;
+    std::print("{}: {}", where, message);
+    if (internal || fallback) {
+        std::print(" (");
+        if (internal) {
+            std::print("i");
+        }
+        if (fallback) {
+            std::print("f");
+        }
+        std::print(")");
+    }
+    std::println();
+    if (where.lineno != 0uz) {
+        std::println("{}| {}", where.lineno, lines[where.lineno - 1uz]);
+        auto pos_hint_width = std::formatted_size("{}| ", where.lineno);
+        if (where.colno != 0uz) {
+            std::println("{:>{}}", "^", pos_hint_width + where.colno);
+        }
+    }
+    std::println("this error was emitted by autofront/{}:{}:{} (function {})",
+                 from.file_name(),
+                 from.line(),
+                 from.column(),
+                 from.function_name());
+    std::println();
+}
+
 }
 
 auto main() -> int
@@ -53,95 +94,50 @@ auto main() -> int
     std::println("{}", logo);
     std::println("AutoFront Test Lexer Repl. Type \".exit\" to exit.");
 
-    auto in_comment            = false;
-    auto current_comment       = std::string{};
-    auto current_comment_start = autofront::source_position{};
-    auto tokens                = std::vector<autofront::token>{};
-    auto comments              = std::vector<autofront::comment>{};
-    auto errors                = std::vector<autofront::error_entry>{};
-
-    auto lines = std::deque<std::string>{};
-
-    for (auto lineno = 1uz;; ++lineno) {
-        auto& line = lines.emplace_back();
+    for (auto source = std::string{};;) {
         std::print("> ");
+        auto line = std::string{};
         std::getline(std::cin, line);
         if (!std::cin) break;
-        if (trim(line) == ".exit"sv) break;
-        auto s = autofront::lex_line(line,
-                                     lineno,
-                                     in_comment,
-                                     current_comment,
-                                     current_comment_start,
-                                     tokens,
-                                     comments,
-                                     errors);
-
-        auto max_lineno_len = 0uz;
-        auto max_colno_len  = 0uz;
-        auto max_token_len  = 0uz;
-        for (auto&& [view, pos, _] : tokens) {
-            max_lineno_len = std::max(max_lineno_len, std::formatted_size("{}", pos.lineno));
-            max_colno_len  = std::max(max_colno_len, std::formatted_size("{}", pos.colno));
-            max_token_len  = std::max(max_token_len, display_width(std::format("{:?}", view)));
+        source += line;
+        if (!line.empty() && line.back() == '\\') {
+            source.back() = '\n';
+            continue;
         }
-        for (auto&& [view, pos, type] : tokens) {
-            std::println("({:>{}}:{:<{}}): {:<{}?} ({}),",
-                         pos.lineno,
-                         max_lineno_len,
-                         pos.colno,
-                         max_colno_len,
-                         view,
-                         max_token_len,
-                         autofront::_as<std::string>(type));
-        }
-        tokens.clear();
+        if (trim(source) == ".exit"sv) break;
 
-        if (!s) {
-            std::println();
-            std::println("===!!!Error!!!===");
-            auto stop = false;
-            for (auto&& [where, message, internal, fallback] : errors) {
-                stop |= fallback;
-                std::print("{}: {:?}", where, message);
-                if (internal || fallback) {
-                    std::print(" (");
-                    if (internal) {
-                        std::print("i");
-                    }
-                    if (fallback) {
-                        std::print("f");
-                    }
-                    std::print(")");
-                }
-                std::println();
+        auto lines = source | std::views::split('\n') | std::views::transform([](auto r) {
+                         return std::string_view{r};
+                     })
+                     | std::ranges::to<std::vector>();
+
+        auto source_utf32 =
+            std::string_view{source} | autofront::views::from_utf8_to_utf32 | std::ranges::to<std::u32string>();
+        auto result = autofront::lex_all(source_utf32);
+
+        if (result) {
+            auto&& tokens     = result.value();
+            auto max_pos1_wid = 0uz;
+            auto max_pos2_wid = 0uz;
+            auto max_lex_wid  = 0uz;
+            for (auto&& token : tokens) {
+                max_pos1_wid = std::max(max_pos1_wid, std::formatted_size("{}", token.pos));
+                max_pos2_wid = std::max(max_pos2_wid, std::formatted_size("{}", token.span().end.colno));
+                max_lex_wid  = std::max(max_lex_wid, std::formatted_size("{}", token.type));
             }
-            errors.clear();
-            if (stop) {
-                break;
-            } else {
-                continue;
+            for (auto&& token : tokens) {
+                std::println("{:>{}}~{:<{}} | {:<{}} | {:?}",
+                             std::format("{}", token.pos),
+                             max_pos1_wid,
+                             token.span().end.colno,
+                             max_pos2_wid,
+                             std::format("{}", token.type),
+                             max_lex_wid,
+                             utf32_to_utf8(token.view));
             }
+        } else {
+            print_error(lines, result.error());
         }
-
-        if (in_comment) {
-            std::println();
-            std::println("in_comment = {}", in_comment);
-            std::println("current_comment = {:?}", current_comment);
-            std::println("current_comment_start = {}", current_comment_start);
-        }
-
-        if (!comments.empty()) {
-            std::println();
-            std::println("Comments:");
-            for (auto&& [kind, start, end, text] : comments) {
-                std::println("{}~{}: {:?} ({}),",
-                             start,
-                             end,
-                             text,
-                             kind == autofront::comment::kinds::line ? "line" : "stream");
-            }
-            comments.clear();
-        }
+        source.clear();
     }
 }
