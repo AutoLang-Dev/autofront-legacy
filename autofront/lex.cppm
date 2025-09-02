@@ -8,12 +8,16 @@ using namespace std::literals;
 export namespace autofront
 {
 
-inline namespace from_cpp2 // 直接复制的 cpp2 代码，后续再改
+class lexing_exception : public std::runtime_error
 {
+    using runtime_error::runtime_error;
+};
 
 enum struct lexeme : std::uint8_t
 {
-    SlashEq,
+    DivWrap,
+    DivSat,
+    DivEq,
     Slash,
     LeftShiftEq,
     LeftShift,
@@ -24,32 +28,38 @@ enum struct lexeme : std::uint8_t
     RightShift,
     GreaterEq,
     Greater,
-    PlusPlus,
-    PlusEq,
+    Inc,
+    AddWrap,
+    AddSat,
+    AddEq,
     Plus,
-    MinusMinus,
-    MinusEq,
-    Arrow,
+    Dec,
+    SubWrap,
+    SubSat,
+    SubEq,
     Minus,
-    LogicalOrEq,
-    LogicalOr,
-    PipeEq,
+    Arrow,
+    OrEq,
+    Or,
+    BitOrEq,
     Pipe,
-    LogicalAndEq,
-    LogicalAnd,
-    MultiplyEq,
-    Multiply,
-    ModuloEq,
-    Modulo,
-    AmpersandEq,
+    AndEq,
+    And,
+    MulWrap,
+    MulSat,
+    MulEq,
+    Star,
+    RemEq,
+    Rem,
+    BitAndEq,
     Ampersand,
-    CaretEq,
+    XorEq,
     Caret,
-    TildeEq,
+    BitNotEq,
     Tilde,
-    EqualComparison,
-    Assignment,
-    NotEqualComparison,
+    Eq,
+    NotEq,
+    Assign,
     Not,
     LeftBrace,
     RightBrace,
@@ -64,40 +74,72 @@ enum struct lexeme : std::uint8_t
     Semicolon,
     Comma,
     Dot,
-    DotDot,
+    MethodAt,
+    PipeCall,
     Ellipsis,
-    EllipsisLess,
-    EllipsisEqual,
+    OpenInterval,
+    ClosedInterval,
     QuestionMark,
     At,
+    Hash,
     Dollar,
-    FloatLiteral,
-    BinaryLiteral,
-    DecimalLiteral,
-    HexadecimalLiteral,
-    StringLiteral,
-    CharacterLiteral,
-    UserDefinedLiteralSuffix,
-    Keyword,
-    Cpp1MultiKeyword,
-    Cpp2FixedType,
-    Identifier,
-    Group = 126,
-    None  = 127,
+    Underscore,
+    FloatLit,
+    BinLit,
+    DecLit,
+    OctLit,
+    HexLit,
+    StrLit,
+    CharLit,
+    LitSuf,
+    Ident,
+    Auto,
+    As,
+    If,
+    Else,
+    While,
+    For,
+    In,
+    Break,
+    Continue,
+    Try,
+    Catch,
+    Throw,
+    Resume,
+    Return,
+    Const,
+    Mut,
+    Match,
+    Indep,
+    This,
+    True,
+    False,
+    Public,
+    Protected,
+    Private,
+    Import,
+    Using,
+    Reloc,
+    Mov,
+    Trustme,
+    Asm,
+    LineComment   = 252,
+    StreamComment = 253,
+    Group         = 254,
+    None          = 255,
 };
 
 auto is_literal(lexeme l) -> bool
 {
     switch (l) {
-        break;
-    case lexeme::FloatLiteral:
-    case lexeme::BinaryLiteral:
-    case lexeme::DecimalLiteral:
-    case lexeme::HexadecimalLiteral:
-    case lexeme::StringLiteral:
-    case lexeme::CharacterLiteral:
+    case lexeme::FloatLit:
+    case lexeme::BinLit:
+    case lexeme::OctLit:
+    case lexeme::DecLit:
+    case lexeme::HexLit:
+    case lexeme::StrLit:
+    case lexeme::CharLit:
         return true;
-        break;
     default:
         return false;
     }
@@ -131,8 +173,6 @@ auto is_operator(lexeme l) -> bool
 
 }
 
-}
-
 template <>
 struct std::formatter<autofront::lexeme, char> : public std::formatter<std::string_view, char>
 {
@@ -147,7 +187,9 @@ auto std::formatter<autofront::lexeme, char>::format(const autofront::lexeme& l,
 {
     using autofront::lexeme;
     switch (l) {
-        AUTOFRONT_LEXEME_TO_STRING(SlashEq);
+        AUTOFRONT_LEXEME_TO_STRING(DivWrap);
+        AUTOFRONT_LEXEME_TO_STRING(DivSat);
+        AUTOFRONT_LEXEME_TO_STRING(DivEq);
         AUTOFRONT_LEXEME_TO_STRING(Slash);
         AUTOFRONT_LEXEME_TO_STRING(LeftShiftEq);
         AUTOFRONT_LEXEME_TO_STRING(LeftShift);
@@ -158,32 +200,38 @@ auto std::formatter<autofront::lexeme, char>::format(const autofront::lexeme& l,
         AUTOFRONT_LEXEME_TO_STRING(RightShift);
         AUTOFRONT_LEXEME_TO_STRING(GreaterEq);
         AUTOFRONT_LEXEME_TO_STRING(Greater);
-        AUTOFRONT_LEXEME_TO_STRING(PlusPlus);
-        AUTOFRONT_LEXEME_TO_STRING(PlusEq);
+        AUTOFRONT_LEXEME_TO_STRING(Inc);
+        AUTOFRONT_LEXEME_TO_STRING(AddWrap);
+        AUTOFRONT_LEXEME_TO_STRING(AddSat);
+        AUTOFRONT_LEXEME_TO_STRING(AddEq);
         AUTOFRONT_LEXEME_TO_STRING(Plus);
-        AUTOFRONT_LEXEME_TO_STRING(MinusMinus);
-        AUTOFRONT_LEXEME_TO_STRING(MinusEq);
+        AUTOFRONT_LEXEME_TO_STRING(Dec);
+        AUTOFRONT_LEXEME_TO_STRING(SubWrap);
+        AUTOFRONT_LEXEME_TO_STRING(SubSat);
+        AUTOFRONT_LEXEME_TO_STRING(SubEq);
         AUTOFRONT_LEXEME_TO_STRING(Arrow);
         AUTOFRONT_LEXEME_TO_STRING(Minus);
-        AUTOFRONT_LEXEME_TO_STRING(LogicalOrEq);
-        AUTOFRONT_LEXEME_TO_STRING(LogicalOr);
-        AUTOFRONT_LEXEME_TO_STRING(PipeEq);
+        AUTOFRONT_LEXEME_TO_STRING(OrEq);
+        AUTOFRONT_LEXEME_TO_STRING(Or);
+        AUTOFRONT_LEXEME_TO_STRING(BitOrEq);
         AUTOFRONT_LEXEME_TO_STRING(Pipe);
-        AUTOFRONT_LEXEME_TO_STRING(LogicalAndEq);
-        AUTOFRONT_LEXEME_TO_STRING(LogicalAnd);
-        AUTOFRONT_LEXEME_TO_STRING(MultiplyEq);
-        AUTOFRONT_LEXEME_TO_STRING(Multiply);
-        AUTOFRONT_LEXEME_TO_STRING(ModuloEq);
-        AUTOFRONT_LEXEME_TO_STRING(Modulo);
-        AUTOFRONT_LEXEME_TO_STRING(AmpersandEq);
+        AUTOFRONT_LEXEME_TO_STRING(AndEq);
+        AUTOFRONT_LEXEME_TO_STRING(And);
+        AUTOFRONT_LEXEME_TO_STRING(MulWrap);
+        AUTOFRONT_LEXEME_TO_STRING(MulSat);
+        AUTOFRONT_LEXEME_TO_STRING(MulEq);
+        AUTOFRONT_LEXEME_TO_STRING(Star);
+        AUTOFRONT_LEXEME_TO_STRING(RemEq);
+        AUTOFRONT_LEXEME_TO_STRING(Rem);
+        AUTOFRONT_LEXEME_TO_STRING(BitAndEq);
         AUTOFRONT_LEXEME_TO_STRING(Ampersand);
-        AUTOFRONT_LEXEME_TO_STRING(CaretEq);
+        AUTOFRONT_LEXEME_TO_STRING(XorEq);
         AUTOFRONT_LEXEME_TO_STRING(Caret);
-        AUTOFRONT_LEXEME_TO_STRING(TildeEq);
+        AUTOFRONT_LEXEME_TO_STRING(BitNotEq);
         AUTOFRONT_LEXEME_TO_STRING(Tilde);
-        AUTOFRONT_LEXEME_TO_STRING(EqualComparison);
-        AUTOFRONT_LEXEME_TO_STRING(Assignment);
-        AUTOFRONT_LEXEME_TO_STRING(NotEqualComparison);
+        AUTOFRONT_LEXEME_TO_STRING(Eq);
+        AUTOFRONT_LEXEME_TO_STRING(NotEq);
+        AUTOFRONT_LEXEME_TO_STRING(Assign);
         AUTOFRONT_LEXEME_TO_STRING(Not);
         AUTOFRONT_LEXEME_TO_STRING(LeftBrace);
         AUTOFRONT_LEXEME_TO_STRING(RightBrace);
@@ -198,28 +246,61 @@ auto std::formatter<autofront::lexeme, char>::format(const autofront::lexeme& l,
         AUTOFRONT_LEXEME_TO_STRING(Semicolon);
         AUTOFRONT_LEXEME_TO_STRING(Comma);
         AUTOFRONT_LEXEME_TO_STRING(Dot);
-        AUTOFRONT_LEXEME_TO_STRING(DotDot);
+        AUTOFRONT_LEXEME_TO_STRING(MethodAt);
+        AUTOFRONT_LEXEME_TO_STRING(PipeCall);
         AUTOFRONT_LEXEME_TO_STRING(Ellipsis);
-        AUTOFRONT_LEXEME_TO_STRING(EllipsisLess);
-        AUTOFRONT_LEXEME_TO_STRING(EllipsisEqual);
+        AUTOFRONT_LEXEME_TO_STRING(OpenInterval);
+        AUTOFRONT_LEXEME_TO_STRING(ClosedInterval);
         AUTOFRONT_LEXEME_TO_STRING(QuestionMark);
         AUTOFRONT_LEXEME_TO_STRING(At);
+        AUTOFRONT_LEXEME_TO_STRING(Hash);
         AUTOFRONT_LEXEME_TO_STRING(Dollar);
-        AUTOFRONT_LEXEME_TO_STRING(FloatLiteral);
-        AUTOFRONT_LEXEME_TO_STRING(BinaryLiteral);
-        AUTOFRONT_LEXEME_TO_STRING(DecimalLiteral);
-        AUTOFRONT_LEXEME_TO_STRING(HexadecimalLiteral);
-        AUTOFRONT_LEXEME_TO_STRING(StringLiteral);
-        AUTOFRONT_LEXEME_TO_STRING(CharacterLiteral);
-        AUTOFRONT_LEXEME_TO_STRING(UserDefinedLiteralSuffix);
-        AUTOFRONT_LEXEME_TO_STRING(Keyword);
-        AUTOFRONT_LEXEME_TO_STRING(Cpp1MultiKeyword);
-        AUTOFRONT_LEXEME_TO_STRING(Cpp2FixedType);
-        AUTOFRONT_LEXEME_TO_STRING(Identifier);
+        AUTOFRONT_LEXEME_TO_STRING(Underscore);
+        AUTOFRONT_LEXEME_TO_STRING(FloatLit);
+        AUTOFRONT_LEXEME_TO_STRING(BinLit);
+        AUTOFRONT_LEXEME_TO_STRING(OctLit);
+        AUTOFRONT_LEXEME_TO_STRING(DecLit);
+        AUTOFRONT_LEXEME_TO_STRING(HexLit);
+        AUTOFRONT_LEXEME_TO_STRING(StrLit);
+        AUTOFRONT_LEXEME_TO_STRING(CharLit);
+        AUTOFRONT_LEXEME_TO_STRING(LitSuf);
+        AUTOFRONT_LEXEME_TO_STRING(Auto);
+        AUTOFRONT_LEXEME_TO_STRING(As);
+        AUTOFRONT_LEXEME_TO_STRING(If);
+        AUTOFRONT_LEXEME_TO_STRING(Else);
+        AUTOFRONT_LEXEME_TO_STRING(While);
+        AUTOFRONT_LEXEME_TO_STRING(For);
+        AUTOFRONT_LEXEME_TO_STRING(In);
+        AUTOFRONT_LEXEME_TO_STRING(Break);
+        AUTOFRONT_LEXEME_TO_STRING(Continue);
+        AUTOFRONT_LEXEME_TO_STRING(Try);
+        AUTOFRONT_LEXEME_TO_STRING(Catch);
+        AUTOFRONT_LEXEME_TO_STRING(Throw);
+        AUTOFRONT_LEXEME_TO_STRING(Resume);
+        AUTOFRONT_LEXEME_TO_STRING(Return);
+        AUTOFRONT_LEXEME_TO_STRING(Const);
+        AUTOFRONT_LEXEME_TO_STRING(Mut);
+        AUTOFRONT_LEXEME_TO_STRING(Match);
+        AUTOFRONT_LEXEME_TO_STRING(Indep);
+        AUTOFRONT_LEXEME_TO_STRING(This);
+        AUTOFRONT_LEXEME_TO_STRING(True);
+        AUTOFRONT_LEXEME_TO_STRING(False);
+        AUTOFRONT_LEXEME_TO_STRING(Public);
+        AUTOFRONT_LEXEME_TO_STRING(Protected);
+        AUTOFRONT_LEXEME_TO_STRING(Private);
+        AUTOFRONT_LEXEME_TO_STRING(Import);
+        AUTOFRONT_LEXEME_TO_STRING(Using);
+        AUTOFRONT_LEXEME_TO_STRING(Reloc);
+        AUTOFRONT_LEXEME_TO_STRING(Mov);
+        AUTOFRONT_LEXEME_TO_STRING(Trustme);
+        AUTOFRONT_LEXEME_TO_STRING(Asm);
+        AUTOFRONT_LEXEME_TO_STRING(Ident);
+        AUTOFRONT_LEXEME_TO_STRING(LineComment);
+        AUTOFRONT_LEXEME_TO_STRING(StreamComment);
+    case lexeme::Group:
+        return std::format_to(ctx.out(), "(GROUP)");
     case lexeme::None:
         return std::format_to(ctx.out(), "(NONE)");
-    default:
-        return std::format_to(ctx.out(), "INTERNAL-ERROR");
     }
 }
 
@@ -228,7 +309,7 @@ export namespace autofront
 
 struct token
 {
-    std::string_view view;
+    std::u32string_view view;
     source_position pos;
     lexeme type;
 
@@ -238,468 +319,875 @@ struct token
     }
 };
 
-auto lex_line(std::string_view line,
-              std::size_t lineno,
-              bool& in_comment,
-              std::string& current_comment,
-              source_position& current_comment_start,
-              std::vector<token>& tokens,
-              std::vector<comment>& comments,
-              std::vector<error_entry>& errors) -> bool // 模仿 cppfront
+struct peeking
 {
-    auto origial_size = tokens.size();
-    auto colno        = 1uz;
-    auto it           = line.begin();
-    auto bound        = line.end();
+    std::ptrdiff_t n;
+};
 
-    auto pos = [&] {
-        return source_position{.lineno = lineno, .colno = colno};
+auto peek(std::ptrdiff_t n = 0z) -> peeking
+{
+    return {.n = n};
+}
+
+struct lexing_i_t
+{
+} lexing_i;
+
+struct lexing_pos_t
+{
+} lexing_pos;
+
+struct storing_token
+{
+    std::size_t n;
+    lexeme l;
+};
+
+auto store(std::size_t n, lexeme l) -> storing_token
+{
+    return {
+        .n = n,
+        .l = l,
     };
-    auto next = [&](std::size_t n) {
-        // [[assume(...)]];
-        return source_position{.lineno = lineno, .colno = colno + n};
+}
+
+struct source_rem_t
+{
+} source_rem;
+
+struct comment_depth_t
+{
+} comment_depth;
+
+struct starting_with
+{
+    std::u32string_view sv;
+};
+
+auto start_with(std::u32string_view sv) -> starting_with
+{
+    return {
+        .sv = sv,
     };
+}
 
-    auto peek = [&](std::size_t n) {
-        auto it2 = ranges::next(it, n, bound);
-        if (it2 == bound) {
-            return char{};
-        }
-        return *it2;
-    };
-
-    auto peeks = std::array<char, 4uz>{};
-    for (auto i = 0uz; i < peeks.size(); ++i) {
-        peeks[i] = peek(i);
-    }
-
-    auto parse_escape = [&](decltype(it) first, char right) -> std::pair<decltype(it), std::string>
-    // pre(*first == '\\')
+template <typename T = token>
+struct [[nodiscard]] lexing
+{
+    struct lexing_promise
     {
-        auto after_first = ranges::next(first);
-        if ("'\"?\\abfnrtv"sv.contains(*after_first)) {
-            return {ranges::next(first, 2uz), {}};
-        } else if ("oxun"sv.contains(*after_first)) {
-            auto after_after = ranges::next(after_first);
-            if (*after_after != '{') {
-                return {after_after, std::format("expected a \"{{\", but {:?} found", *after_after)};
-            }
-            for (; after_after < bound && *after_after != '}'; ++after_after) {
-                if (after_after + 1uz == bound) {
-                    return {after_after + 1uz, R"(expected a "}" before the end of line)"};
-                }
-                if (*after_after == right) {
-                    return {after_after, std::format(R"(expected a "}}" before the closing "{}")", right)};
-                }
-            }
-            return {ranges::next(after_after), {}};
+        using handle_t = std::coroutine_handle<lexing_promise>;
+
+        std::exception_ptr exception_;
+        std::variant<std::monostate, T, error_entry> result_;
+        std::u32string_view source_;
+        std::size_t i_;
+        std::size_t comment_depth_;
+        source_position pos_;
+
+        auto get_return_object() -> lexing
+        {
+            return unique_coro{handle_t::from_promise((*this))};
         }
-        return {first, std::format("unexpected a {:?}, not a legal escape sequence", *after_first)};
-    };
 
-    auto iter_next = [&](std::size_t n = 1uz) {
-        colno += n;
-        ranges::advance(it, n);
-        // ranges::shift_left(peeks, 1uz);
-        std::shift_left(peeks.begin(), peeks.end(), n);
-        // for (auto&& [p, i] : peeks | views::enumerate | views::reverse | views::take(n)) {
-        for (auto i = peeks.size() - 1uz; auto&& p : peeks | views::reverse | views::take(n)) {
-            p = peek(i);
-            --i;
+        auto return_value(T tok) -> void
+        {
+            result_ = std::move(tok);
+        }
+
+        auto return_value(storing_token storing) -> void
+            requires std::same_as<T, token>
+        {
+            auto [n, l] = storing;
+            auto slice  = source_.substr(i_, n);
+
+            result_ = token{
+                .view = slice,
+                .pos  = pos_,
+                .type = l,
+            };
+            pos_.colno += n;
+            i_         += n;
+        }
+
+        auto return_value(error_entry err, std::source_location l = std::source_location::current()) -> void
+        {
+            err.from  = l;
+            err.where = pos_;
+            result_   = std::move(err);
+        }
+
+        auto initial_suspend() const noexcept -> std::suspend_always
+        {
+            return {};
+        }
+
+        auto final_suspend() const noexcept -> std::suspend_always
+        {
+            return {};
+        }
+
+        auto unhandled_exception() -> void
+        {
+            exception_ = std::current_exception();
+        }
+
+        auto await_transform(this_promise_t) -> just_awaitable<lexing_promise&>
+        {
+            return {*this};
+        }
+
+        auto await_transform(peeking pk) -> just_awaitable<char32_t>
+        {
+            auto n = pk.n;
+            if (n < 0z) {
+                auto t = [&] {
+                    if (n == std::numeric_limits<std::ptrdiff_t>::max()) {
+                        return std::numeric_limits<std::size_t>::max() / 2uz + 1uz;
+                    }
+                    return static_cast<std::size_t>(-n);
+                }();
+                if (i_ < t) {
+                    return char32_t{};
+                }
+                assert_(i_ - t < source_.size(), "A");
+                return source_[i_ - t];
+            }
+            if (n >= source_.size() - i_) {
+                return char32_t{};
+            }
+            return source_[i_ + n];
+        }
+
+        auto await_transform(lexing_i_t) -> just_awaitable<std::size_t>
+        {
+            return i_;
+        }
+
+        auto await_transform(lexing_pos_t) -> just_awaitable<source_position>
+        {
+            return pos_;
+        }
+
+        auto await_transform(source_rem_t) -> just_awaitable<std::u32string_view>
+        {
+            return source_.substr(i_);
+        }
+
+        auto await_transform(comment_depth_t) -> just_awaitable<std::size_t>
+        {
+            return comment_depth_;
+        }
+
+        auto await_transform(starting_with staring) -> just_awaitable<bool>
+        {
+            return source_.substr(i_).starts_with(staring.sv);
+        }
+
+        template <typename U>
+        struct lexing_transformed_awaitable
+        {
+            lexing<U> lexing_;
+            lexing_promise& promise_;
+            std::source_location l;
+
+            auto await_ready() -> bool
+            {
+                if (!lexing_.is_stateful()) {
+                    throw lexing_exception{R"(using co_await for a stateless "lexing")"};
+                }
+                return false;
+            }
+
+            auto await_suspend(handle_t handle) -> bool
+            {
+                assert_(lexing_.is_stateful(), R"(using co_await for a stateless "lexing")", l);
+                assert_(&promise_ == &handle.promise(), "two coro is not equal", l);
+
+                auto&& lp = lexing_.promise();
+                lexing_.resume(promise_.source_, promise_.i_, promise_.pos_, promise_.comment_depth_);
+
+                assert_(lexing_.finished(), "lexinng is not finished", l);
+                if (lp.exception_) {
+                    promise_.exception_ = std::move(lp.exception_);
+                    return true;
+                }
+                if (lexing_.has_error()) {
+                    promise_.result_ = std::get<error_entry>(std::move(lp.result_));
+                    return true;
+                }
+                return false;
+            }
+
+            auto await_resume() noexcept -> U
+            {
+                assert_(lexing_.has_value(), "lexing is failed", l);
+
+                auto&& lp               = lexing_.promise();
+                promise_.i_             = lp.i_;
+                promise_.pos_           = lp.pos_;
+                promise_.comment_depth_ = lp.comment_depth_;
+
+                return std::move(std::get<U>(lp.result_));
+            }
+        };
+
+        template <typename U>
+        auto await_transform(lexing<U> l, std::source_location loc = std::source_location::current())
+            -> lexing_transformed_awaitable<U>
+        {
+            return {
+                .lexing_  = std::move(l),
+                .promise_ = *this,
+                .l        = loc,
+            };
         }
     };
 
-    auto store = [&](std::size_t n, lexeme type) {
-        // [[assume(n <= ranges::distance(it, bound))]];
-        if (n == 0uz) return;
-        tokens.push_back({
-            .view = {it, n},
-            .pos  = pos(),
-            .type = type
-        });
-        iter_next(n - 1uz);
-    };
-    auto store2 = [&](decltype(it) last, lexeme type) {
-        [[assume(last < bound)]]; // 之后会换成并非随机访问迭代器，不过仍然支持比较
-        if (last == it) return;
-        tokens.push_back({
-            .view = {it, last},
-            .pos  = pos(),
-            .type = type
-        });
-        iter_next(ranges::distance(it, last) - 1uz);
-    };
+    using promise_type = lexing_promise;
 
-    for (; it != bound; iter_next()) {
-        if (in_comment) {
-            if (peeks[0] == '*' && peeks[1] == '/') {
-                iter_next();
-                current_comment += "*/"sv;
-                comments.push_back({
-                    .kind  = comment::kinds::stream,
-                    .start = current_comment_start,
-                    .end   = next(1uz),
-                    .text  = std::move(current_comment),
-                });
-                in_comment = false;
-            } else {
-                current_comment += peeks[0];
-            }
+    unique_coro<promise_type> handle_;
+
+    auto promise() const noexcept -> promise_type&
+    {
+        assert_(is_stateful(), "stateless lexing");
+        return handle_.promise();
+    }
+
+    lexing(unique_coro<promise_type> handle) : handle_{std::move(handle)} {}
+
+    auto index() const noexcept -> std::size_t
+    {
+        return promise().i_;
+    }
+
+    auto pos() const noexcept -> source_position
+    {
+        return promise().pos_;
+    }
+
+    auto resume(std::u32string_view source, std::size_t i, source_position pos, std::size_t comment_depth = 0uz)
+    {
+        auto&& p         = promise();
+        p.source_        = source;
+        p.i_             = i;
+        p.pos_           = pos;
+        p.comment_depth_ = comment_depth;
+        handle_.resume();
+    }
+
+    lexing()         = default;
+    lexing(lexing&&) = default;
+
+    auto operator=(lexing&&) -> lexing& = default;
+
+    auto is_stateful() const noexcept -> bool
+    {
+        return static_cast<bool>(handle_);
+    }
+
+    auto finished() const noexcept -> bool
+    {
+        if (!is_stateful()) return false;
+        if (promise().exception_) return true;
+        return !std::holds_alternative<std::monostate>(promise().result_);
+    }
+
+    auto has_value() const noexcept -> bool
+    {
+        if (!is_stateful()) return false;
+        if (promise().exception_) return false;
+        return std::holds_alternative<T>(promise().result_);
+    }
+
+    auto has_error() const noexcept -> bool
+    {
+        if (!is_stateful()) return false;
+        if (promise().exception_) return false;
+        return std::holds_alternative<error_entry>(promise().result_);
+    }
+
+    auto take_result() const -> std::expected<T, error_entry>
+    {
+        if (!is_stateful()) {
+            throw lexing_exception{"stateless parsing"};
+        }
+        if (auto& e = promise().exception_) {
+            std::rethrow_exception(std::move(e));
+        }
+        if (!finished()) {
+            throw lexing_exception{"parsing is not finished"};
+        }
+        if (has_value()) {
+            return std::move(std::get<T>(promise().result_));
         } else {
-            switch (peeks[0]) {
-            case '/':
-                if (peeks[1] == '*') {
-                    current_comment       = "/*";
-                    current_comment_start = pos();
-                    in_comment            = true;
-                    iter_next();
-                } else if (peeks[1] == '/') {
-                    auto start = pos();
-                    auto text  = std::string_view{it, bound};
-                    iter_next(ranges::distance(it, ranges::prev(bound)));
-                    comments.push_back({
-                        .kind  = comment::kinds::line,
-                        .start = start,
-                        .end   = next(1uz),
-                        .text  = std::string{text},
-                    });
-                } else if (peeks[1] == '/') {
-                    store(2uz, lexeme::SlashEq);
-                } else {
-                    store(1uz, lexeme::Slash);
-                }
-                break;
-            case '<':
-                if (peeks[1] == '<') {
-                    if (peeks[2] == '=') {
-                        store(3uz, lexeme::LeftShiftEq);
-                    } else {
-                        store(2uz, lexeme::LeftShift);
-                    }
-                } else if (peeks[1] == '=') {
-                    if (peeks[2] == '>') {
-                        store(3uz, lexeme::Spaceship);
-                    } else {
-                        store(2uz, lexeme::LessEq);
-                    }
-                } else {
-                    store(1uz, lexeme::Less);
-                }
-                break;
-            case '>':
-                // 这是为了简化尖括号对的解析
-                // if (peeks[1] == '>') {
-                //     if (peeks[2] == '=') {
-                //         store(3uz, lexeme::RightShiftEq);
-                //     } else {
-                //         store(2uz, lexeme::RightShift);
-                //     }
-                // } else {
-                //     if (peeks[1] == '=') {
-                //         store(2uz, lexeme::GreaterEq);
-                //     } else {
-                /*      */ store(1uz, lexeme::Greater);
-                //     }
-                // }
-                break;
-            case '+':
-                if (peeks[1] == '+') {
-                    store(2uz, lexeme::PlusPlus);
-                } else if (peeks[1] == '=') {
-                    store(2uz, lexeme::PlusEq);
-                } else {
-                    store(1uz, lexeme::Plus);
-                }
-                break;
-            case '-':
-                if (peeks[1] == '-') {
-                    store(2uz, lexeme::MinusMinus);
-                } else if (peeks[1] == '=') {
-                    store(2uz, lexeme::MinusEq);
-                } else if (peeks[1] == '>') {
-                    store(2uz, lexeme::Arrow);
-                } else {
-                    store(1uz, lexeme::Minus);
-                }
-                break;
-            case '|':
-                if (peeks[1] == '|') {
-                    if (peeks[2] == '=') {
-                        store(3uz, lexeme::LogicalOrEq);
-                    } else {
-                        store(2uz, lexeme::LogicalOr);
-                    }
-                } else if (peeks[1] == '=') {
-                    store(2uz, lexeme::PipeEq);
-                } else {
-                    store(1uz, lexeme::Pipe);
-                }
-                break;
-            case '&':
-                if (peeks[1] == '&') {
-                    if (peeks[2] == '=') {
-                        store(3uz, lexeme::LogicalAndEq);
-                    } else {
-                        store(2uz, lexeme::LogicalAnd);
-                    }
-                } else if (peeks[1] == '=') {
-                    store(2uz, lexeme::AmpersandEq);
-                } else {
-                    store(1uz, lexeme::Ampersand);
-                }
-                break;
-            case '*':
-                if (peeks[1] == '=') {
-                    store(2uz, lexeme::MultiplyEq);
-                } else {
-                    store(1uz, lexeme::MultiplyEq);
-                }
-                break;
-            case '%':
-                if (peeks[1] == '=') {
-                    store(2uz, lexeme::ModuloEq);
-                } else {
-                    store(1uz, lexeme::Modulo);
-                }
-                break;
-            case '^':
-                if (peeks[1] == '=') {
-                    store(2uz, lexeme::CaretEq);
-                } else {
-                    store(1uz, lexeme::Caret);
-                }
-                break;
-            case '~':
-                if (peeks[1] == '=') {
-                    store(2uz, lexeme::TildeEq);
-                } else {
-                    store(1uz, lexeme::Tilde);
-                }
-                break;
-            case '=':
-                if (peeks[1] == '=') {
-                    store(2uz, lexeme::EqualComparison);
-                } else {
-                    store(1uz, lexeme::Assignment);
-                }
-                break;
-            case '!':
-                if (peeks[1] == '=') {
-                    store(2uz, lexeme::NotEqualComparison);
-                } else {
-                    store(1uz, lexeme::Not);
-                }
-                break;
-            case '.':
-                if (peeks[1] == '.') {
-                    if (peeks[2] == '.') {
-                        store(3uz, lexeme::Ellipsis);
-                    } else if (peeks[2] == '<') {
-                        store(3uz, lexeme::EllipsisLess);
-                    } else if (peeks[2] == '=') {
-                        store(3uz, lexeme::EllipsisEqual);
-                    } else if (peeks[2] == '|') {
-                        // store(3uz, lexeme:: );
-                        std::println(std::cerr, "To be impl");
-                        std::abort();
-                    } else {
-                        store(2uz, lexeme::DotDot);
-                    }
-                } else {
-                    store(1uz, lexeme::Dot);
-                }
-                break;
-            case ':':
-                if (peeks[1] == ':') {
-                    store(2uz, lexeme::Scope);
-                } else {
-                    store(1uz, lexeme::Colon);
-                }
-                break;
-            case '{':
-                store(1uz, lexeme::LeftBrace);
-                break;
-            case '}':
-                store(1uz, lexeme::RightBrace);
-                break;
-            case '(':
-                store(1uz, lexeme::LeftParen);
-                break;
-            case ')':
-                store(1uz, lexeme::RightParen);
-                break;
-            case '[':
-                store(1uz, lexeme::LeftBracket);
-                break;
-            case ']':
-                store(1uz, lexeme::RightBracket);
-                break;
-            case ';':
-                store(1uz, lexeme::Semicolon);
-                break;
-            case ',':
-                store(1uz, lexeme::Comma);
-                break;
-            case '?':
-                store(1uz, lexeme::QuestionMark);
-                break;
-            case '@':
-                store(1uz, lexeme::At);
-                break;
-            case '$':
-                store(1uz, lexeme::Dollar);
-                break;
-            case '0':
-                if ("bB"sv.contains(peeks[1])) {
-                    auto is_bin = [](char digit) {
-                        return "01"sv.contains(digit);
-                    };
-                    if (is_bin(peeks[2])) {
-                        auto iter = ranges::next(it, 3uz, bound);
-                        for (; iter < bound && (is_bin(*iter) || *iter == '\''); ++iter);
-                        store2(iter, lexeme::BinaryLiteral);
-                    } else {
-                        errors.push_back({
-                            .where = pos(),
-                            .message =
-                                std::format("binary literal cannot be empty (0{} must be followed by binary digits)",
-                                            peeks[1]),
-                            .from = std::source_location::current(),
-                        });
-                        return false; // 实际上可以视情况继续分析
-                    }
-                } else if ("xX"sv.contains(peeks[1])) {
-                    if (std::isxdigit(peeks[2])) {
-                        auto iter = ranges::next(it, 3uz, bound);
-                        for (; iter < bound && (std::isxdigit(*iter) || *iter == '\''); ++iter);
-                        store2(iter, lexeme::HexadecimalLiteral);
-                    } else {
-                        errors.push_back({
-                            .where   = pos(),
-                            .message = std::format(
-                                "hexadecimal literal cannot be empty (0{} must be followed by hexadecimal digits)",
-                                peeks[1]),
-                            .from = std::source_location::current(),
-                        });
-                        return false;
-                    }
-                }
-                [[fallthrough]];
-            default:
-                if (peeks[0] == 'n' && peeks[1] == 'o' && peeks[2] == 't' && std::isspace(peeks[3])) {
-                    store(3uz, lexeme::Not);
-                } else if (std::isdigit(peeks[0])) { // 数字字面量，需要完善
-                    auto iter = ranges::next(it, 1uz, bound);
-                    for (; iter < bound && (std::isdigit(*iter) || *iter == '\''); ++iter);
-                    if ((*iter != '.' || (iter + 1 == bound && std::isdigit(iter[1]))) && !"eEfF"sv.contains(*iter)) {
-                        if (iter < bound && "uU"sv.contains(*iter)) ++iter;
-                        if (iter < bound && "lL"sv.contains(*iter)) ++iter;
-                        if (iter < bound && "lL"sv.contains(*iter)) ++iter;
-                        store2(iter, lexeme::DecimalLiteral);
-                    } else {
-                        if (*iter == '.') {
-                            ++iter;
-                            if (iter == bound || !std::isdigit(*iter)) {
-                                errors.push_back({
-                                    .where   = pos(),
-                                    .message = "a floating point literal must have at least one digit "
-                                               "after the decimal point (can be '.0')",
-                                    .from    = std::source_location::current(),
-                                });
-                                return false;
-                            }
-                            for (; iter < bound && (std::isdigit(*iter) || *iter == '\''); ++iter);
-                        }
-                        if (iter < bound && "eE"sv.contains(*iter)) {
-                            ++iter;
-                            if (iter < bound && "-+"sv.contains(*iter)) ++iter;
-                            for (; iter < bound && (std::isdigit(*iter) || *iter == '\''); ++iter);
-                        }
-                        if (iter < bound && "fFlL"sv.contains(*iter)) ++iter;
-                        store2(iter, lexeme::FloatLiteral);
-                    }
-                } else if (peeks[0] == '"') { // 字符串字面量
-                    auto iter = ranges::next(it, 1uz, bound);
-                    while (iter < bound && *iter != '"') {
-                        if (*iter == '\\') {
-                            auto [escape_end, msg] = parse_escape(iter, '"');
-                            if (!msg.empty()) {
-                                errors.push_back({
-                                    .where   = next(ranges::distance(it, escape_end)),
-                                    .message = std::move(msg),
-                                    .from    = std::source_location::current(),
-                                });
-                                return false;
-                            }
-                            iter = escape_end;
-                        } else {
-                            ++iter;
-                        }
-                    }
-                    if (iter == bound) {
-                        errors.push_back({
-                            .where   = next(ranges::distance(it, iter)),
-                            .message = std::format("string literal {:?} is missing its closing \"",
-                                                   std::string_view{it, iter}),
-                            .from    = std::source_location::current(),
-                        });
-                        return false;
-                    }
-                    store2(ranges::next(iter), lexeme::StringLiteral);
-                } else if (peeks[0] == '\'') { // 字符字面量
-                    if (peeks[1] == '\'') {
-                        errors.push_back({.where = pos(), .message = "character literal is empty"});
-                        return false;
-                    }
-                    auto missing = 0uz;
-                    if (peeks[1] == '\\') {
-                        auto [escape_end, msg] = parse_escape(std::next(it), '\'');
-                        if (!msg.empty()) {
-                            errors.push_back({
-                                .where   = next(ranges::distance(it, escape_end)),
-                                .message = std::move(msg),
-                                .from    = std::source_location::current(),
-                            });
-                            return false;
-                        }
-                        if (escape_end < bound && *escape_end == '\'') {
-                            ++escape_end;
-                            store2(escape_end, lexeme::CharacterLiteral);
-                            continue;
-                        } else {
-                            missing = ranges::distance(it, escape_end);
-                        }
-                    }
-                    if (missing || peeks[1] == char{} || peeks[2] != '\'') {
-                        errors.push_back({
-                            .where   = next(missing ? missing : 2uz),
-                            .message = "character literal is missing its closing \"'\"",
-                            .from    = std::source_location::current(),
-                        });
-                        return false;
-                    }
-                    store(3uz, lexeme::CharacterLiteral);
-                } else if (is_start(peeks[0])) { // 没有考虑字面量后缀，需要完善
-                    auto iter = ranges::next(it, 1uz, bound);
-                    for (; iter < bound && is_continue(*iter); ++iter);
-                    store2(iter, lexeme::Identifier);
-                } else if (!std::isspace(peeks[0])) {
-                    errors.push_back({
-                        .where    = pos(),
-                        .message  = std::format("unexcepted text {:?}", peeks[0]),
-                        .fallback = true, // a noisy fallback error message // from cppfront
-                        .from     = std::source_location::current(),
-                    });
-                    return false;
-                }
-            }
+            return std::unexpected{std::move(std::get<error_entry>(promise().result_))};
         }
     }
 
-    if (in_comment) {
-        current_comment += '\n';
+    auto comment_depth() const -> std::size_t
+    {
+        if (!is_stateful()) {
+            throw lexing_exception{"stateless parsing"};
+        }
+        return promise().comment_depth_;
     }
-    return tokens.size() != origial_size;
+};
+
+template <typename... Args>
+auto lex_fail(std::format_string<Args...> fmt, Args&&... args) -> error_entry
+{
+    return {
+        .message = std::format(fmt, std::forward<Args>(args)...),
+    };
+}
+
+auto lex_ws() -> lexing<unit>
+{
+    auto& p = co_await this_promise;
+    while (p.i_ < p.source_.size()) {
+        assert_(p.i_ < p.source_.size(), "A");
+        auto pk = p.source_[p.i_];
+        if (!is_space(pk)) break;
+        if (pk == U'\n') {
+            p.pos_ = p.pos_.next_line_front();
+        } else {
+            ++p.pos_.colno;
+        }
+        ++p.i_;
+    }
+    co_return unit{};
+}
+
+auto lex_line_comment() -> lexing<>
+{
+    auto&& p = co_await this_promise;
+    auto pos = p.pos_;
+    auto rem = p.source_.substr(p.i_);
+    auto j   = 0uz;
+    auto lf  = false;
+    for (; j < rem.size(); ++j) {
+        if (rem[j] == U'\n') {
+            lf = true;
+            break;
+        }
+    }
+    if (lf) {
+        p.pos_  = pos.next_line_front();
+        p.i_   += j + 1uz;
+    } else {
+        p.pos_  = pos.next(j);
+        p.i_   += j;
+    }
+    co_return token{
+        .view = rem.substr(0uz, j),
+        .pos  = pos,
+        .type = lexeme::LineComment,
+    };
+}
+
+auto lex_stream_comment() -> lexing<>
+{
+    auto&& p      = co_await this_promise;
+    auto line_rem = p.source_.substr(p.i_);
+    assert_(p.comment_depth_ || line_rem.starts_with(U"/*"sv), "expected /* or non-zero depth");
+    auto j = 0uz;
+    for (auto& depth = p.comment_depth_; j < line_rem.size(); ++j) {
+        auto rem = line_rem.substr(j);
+        if (auto begin = rem.starts_with(U"/*"sv); begin || rem.starts_with(U"*/"sv)) {
+            if (begin) {
+                ++depth;
+            } else {
+                --depth;
+            }
+            ++j;
+        }
+        if (depth == 0uz) {
+            ++j;
+            break;
+        }
+    }
+    co_return store(j, lexeme::StreamComment);
+}
+
+auto lex_skip() -> lexing<unit>
+{
+    if (co_await comment_depth) {
+        co_await lex_stream_comment();
+    }
+    while (true) {
+        auto pk = co_await peek();
+        if (is_space(pk)) {
+            co_await lex_ws();
+        } else if (pk == U'/') {
+            auto pk1 = co_await peek(1);
+            if (pk1 == U'*') {
+                co_await lex_stream_comment();
+            } else if (pk1 == U'/') {
+                co_await lex_line_comment();
+            } else co_return unit{};
+        } else co_return unit{};
+    }
+}
+
+auto lex_slash() -> lexing<>
+{
+    assert_(co_await peek() == U'/', "expected /");
+    auto pk1 = co_await peek(1);
+    // if (pk1 == U'/') co_return co_await lex_line_comment();
+    // if (pk1 == U'*') co_return co_await lex_stream_comment();
+    assert_(pk1 != U'*', "unexpected /*");
+    assert_(pk1 != U'/', "unexpected //");
+    if (pk1 == U'=') co_return store(2uz, lexeme::DivEq);
+    if (pk1 == U'|') co_return store(2uz, lexeme::DivSat);
+    if (pk1 == U'%') co_return store(2uz, lexeme::DivWrap);
+    co_return store(1uz, lexeme::Slash);
+}
+
+auto lex_less() -> lexing<>
+{
+    assert_(co_await peek() == U'<', "expected <");
+    auto pk1 = co_await peek(1);
+    auto pk2 = co_await peek(2);
+    if (pk1 == U'<') {
+        if (pk2 == U'=') {
+            co_return store(3uz, lexeme::LeftShiftEq);
+        }
+        co_return store(2uz, lexeme::LeftShift);
+    }
+    if (pk1 == U'=') {
+        if (pk2 == U'>') {
+            co_return store(3uz, lexeme::Spaceship);
+        }
+        co_return store(2uz, lexeme::LessEq);
+    }
+    co_return store(1uz, lexeme::Less);
+}
+
+auto lex_greater() -> lexing<>
+{
+    assert_(co_await peek() == U'>', "expected >");
+    // auto pk1 = co_await peek(1);
+    // auto pk2 = co_await peek(2);
+    // if (pk1 == U'>') {
+    //     if (pk2 == U'=') {
+    //         co_return store_token(3uz, lexeme::RightShiftEq);
+    //     }
+    //     co_return store_token(2uz, lexeme::RightShift);
+    // }
+    // if (pk1 == U'=') {
+    //     co_return store_token(2uz, lexeme::GreaterEq);
+    // }
+    co_return storing_token(1uz, lexeme::Greater); // 这是为了简化尖括号对的解析
+}
+
+auto lex_plus() -> lexing<>
+{
+    assert_(co_await peek() == U'+', "expected +");
+    auto pk1 = co_await peek(1);
+    if (pk1 == U'+') co_return store(2uz, lexeme::Inc);
+    if (pk1 == U'=') co_return store(2uz, lexeme::AddEq);
+    if (pk1 == U'|') co_return store(2uz, lexeme::AddSat);
+    if (pk1 == U'%') co_return store(2uz, lexeme::AddWrap);
+    co_return store(1uz, lexeme::Plus);
+}
+
+auto lex_minus() -> lexing<>
+{
+    assert_(co_await peek() == U'-', "expected -");
+    auto pk1 = co_await peek(1);
+    if (pk1 == U'-') co_return store(2uz, lexeme::Dec);
+    if (pk1 == U'=') co_return store(2uz, lexeme::SubEq);
+    if (pk1 == U'|') co_return store(2uz, lexeme::SubSat);
+    if (pk1 == U'%') co_return store(2uz, lexeme::SubWrap);
+    if (pk1 == U'>') co_return store(2uz, lexeme::Arrow);
+    co_return store(1uz, lexeme::Minus);
+}
+
+auto lex_pipe() -> lexing<>
+{
+    assert_(co_await peek() == U'|', "expected |");
+    auto pk1 = co_await peek(1);
+    auto pk2 = co_await peek(2);
+    if (pk1 == U'|') {
+        if (pk2 == U'=') {
+            co_return store(3uz, lexeme::OrEq);
+        }
+        co_return store(2uz, lexeme::Or);
+    }
+    if (pk1 == U'=') {
+        co_return store(2uz, lexeme::BitOrEq);
+    }
+    co_return store(1uz, lexeme::Pipe);
+}
+
+auto lex_ampersand() -> lexing<>
+{
+    assert_(co_await peek() == U'&', "expected &");
+    auto pk1 = co_await peek(1);
+    auto pk2 = co_await peek(2);
+    if (pk1 == U'&') {
+        if (pk2 == U'=') {
+            co_return store(3uz, lexeme::AndEq);
+        }
+        co_return store(2uz, lexeme::And);
+    }
+    if (pk1 == U'=') {
+        co_return store(2uz, lexeme::BitAndEq);
+    }
+    co_return store(1uz, lexeme::Ampersand);
+}
+
+auto lex_star() -> lexing<>
+{
+    assert_(co_await peek() == U'*', "expected *");
+    auto pk1 = co_await peek(1);
+    if (pk1 == U'=') co_return store(2uz, lexeme::MulEq);
+    if (pk1 == U'|') co_return store(2uz, lexeme::MulSat);
+    if (pk1 == U'%') co_return store(2uz, lexeme::MulWrap);
+    co_return store(1uz, lexeme::Star);
+}
+
+auto lex_rem() -> lexing<>
+{
+    assert_(co_await peek() == U'%', "expected %");
+    auto pk1 = co_await peek(1);
+    if (pk1 == U'=') co_return store(2uz, lexeme::RemEq);
+    co_return store(1uz, lexeme::Rem);
+}
+
+auto lex_caret() -> lexing<>
+{
+    assert_(co_await peek() == U'^', "expected ^");
+    auto pk1 = co_await peek(1);
+    if (pk1 == U'=') co_return store(2uz, lexeme::XorEq);
+    co_return store(1uz, lexeme::Caret);
+}
+
+auto lex_tilde() -> lexing<>
+{
+    assert_(co_await peek() == U'~', "expected ~");
+    auto pk1 = co_await peek(1);
+    if (pk1 == U'=') co_return store(2uz, lexeme::BitNotEq);
+    co_return store(1uz, lexeme::Tilde);
+}
+
+auto lex_eq() -> lexing<>
+{
+    assert_(co_await peek() == U'=', "expected =");
+    auto pk1 = co_await peek(1);
+    if (pk1 == U'=') co_return store(2uz, lexeme::Eq);
+    co_return store(1uz, lexeme::Assign);
+}
+
+auto lex_not() -> lexing<>
+{
+    assert_(co_await peek() == U'!', "expected !");
+    auto pk1 = co_await peek(1);
+    if (pk1 == U'=') co_return store(2uz, lexeme::NotEq);
+    co_return store(1uz, lexeme::Not);
+}
+
+auto lex_dot() -> lexing<>
+{
+    assert_(co_await peek() == U'.', "expected .");
+    auto pk1 = co_await peek(1);
+    auto pk2 = co_await peek(2);
+    if (pk1 == U'.') {
+        if (pk2 == U'.') co_return store(3uz, lexeme::Ellipsis);
+        if (pk2 == U'<') co_return store(3uz, lexeme::OpenInterval);
+        if (pk2 == U'=') co_return store(3uz, lexeme::ClosedInterval);
+        co_return store(2uz, lexeme::MethodAt);
+    }
+    if (pk1 == U'|') co_return store(2uz, lexeme::PipeCall);
+    co_return store(1uz, lexeme::Dot);
+}
+
+auto lex_colon() -> lexing<>
+{
+    assert_(co_await peek() == U':', "expected :");
+    auto pk1 = co_await peek(1);
+    if (pk1 == U':') co_return store(2uz, lexeme::Scope);
+    co_return store(1uz, lexeme::Colon);
+}
+
+auto lex_digit() -> lexing<>;
+
+auto lex_hash() -> lexing<>
+{
+    assert_(co_await peek() == U'#', "expected #");
+    co_return lex_fail("not impl");
+}
+
+auto lex_zero() -> lexing<>
+{
+    assert_(co_await peek() == '0', "expected 0");
+
+    auto is_oct = [](char32_t ch) {
+        return U'0' <= ch && ch <= U'7';
+    };
+    auto is_bin = [](char32_t ch) {
+        return U'0' == ch || ch == U'1';
+    };
+
+    auto kind = co_await peek(1);
+
+    auto j = 2uz;
+    if (kind == U'x' || kind == U'X') {
+        while (is_xdigit(co_await peek(j))) ++j;
+        co_return store(j, lexeme::HexLit);
+    }
+    if (kind == U'd' || kind == U'D') {
+        while (is_digit(co_await peek(j))) ++j;
+        co_return store(j, lexeme::DecLit);
+    }
+    if (kind == U'o' || kind == U'O') {
+        while (is_oct(co_await peek(j))) ++j;
+        co_return store(j, lexeme::OctLit);
+    }
+    if (kind == U'b' || kind == U'B') {
+        while (is_bin(co_await peek(j))) ++j;
+        co_return store(j, lexeme::BinLit);
+    }
+    if (is_digit(kind)) {
+        co_return co_await lex_digit();
+    }
+    co_return lex_fail("expected x / d / o / b, but U+{:X} found", static_cast<std::uint32_t>(kind));
+}
+
+auto lex_esc_seq() -> lexing<>
+{
+    co_return lex_fail("not impl");
+}
+
+auto lex_single_quot() -> lexing<>
+{
+    assert_(co_await peek() == '\'', "expected :");
+    auto pk1 = co_await peek(1);
+    auto pk2 = co_await peek(2);
+    if (pk1 == U'\'') {
+        co_return lex_fail("character literal is empty");
+    }
+    if (pk1 == U'\n') {
+        co_return lex_fail("LF is not allowed in character literal");
+    }
+    if (pk2 == char32_t{}) {
+        co_return lex_fail("unexpected end of file");
+    }
+    if (pk2 != U'\'') {
+        co_return lex_fail("expected a ', but U+{:X} found", static_cast<std::uint32_t>(pk2));
+    }
+    co_return store(3uz, lexeme::CharLit);
+}
+
+auto lex_double_quot() -> lexing<>
+{
+    assert_(co_await peek() == U'"', "expected \"");
+    auto j = 1uz;
+    for (;; ++j) {
+        auto pk = co_await peek(j);
+        if (pk == char32_t{}) {
+            co_return lex_fail("unexpected end of file");
+        }
+        if (pk == U'"') {
+            co_return store(j + 1uz, lexeme::StrLit);
+        }
+        if (pk == U'\n') {
+            co_return lex_fail("LF is not allowed in string literal");
+        }
+    }
+}
+
+auto lex_digit() -> lexing<>
+{
+    assert_(is_digit(co_await peek()), "expected a digit");
+    auto j = 1uz;
+    while (is_digit(co_await peek(j))) ++j;
+    co_return store(j, lexeme::DecLit);
+}
+
+auto lex_ident() -> lexing<>
+{
+    auto pk = co_await peek();
+    assert_(pk == U'_' || is_xid_start(pk), "expected XID_Start or _");
+    auto j = 1uz;
+    while (is_xid_continue(co_await peek(j))) {
+        ++j;
+    }
+    co_return store(j, lexeme::Ident);
+}
+
+auto match_ident(std::u32string_view ident) -> lexeme
+{
+    static const auto keywords = std::flat_map<std::u32string_view, lexeme>{
+        {U"auto"sv,      lexeme::Auto     },
+        {U"as"sv,        lexeme::As       },
+        {U"if"sv,        lexeme::If       },
+        {U"else"sv,      lexeme::Else     },
+        {U"while"sv,     lexeme::While    },
+        {U"for"sv,       lexeme::For      },
+        {U"in"sv,        lexeme::In       },
+        {U"break"sv,     lexeme::Break    },
+        {U"continue"sv,  lexeme::Continue },
+        {U"try"sv,       lexeme::Try      },
+        {U"catch"sv,     lexeme::Catch    },
+        {U"throw"sv,     lexeme::Throw    },
+        {U"resume"sv,    lexeme::Resume   },
+        {U"return"sv,    lexeme::Return   },
+        {U"const"sv,     lexeme::Const    },
+        {U"mut"sv,       lexeme::Mut      },
+        {U"match"sv,     lexeme::Match    },
+        {U"indep"sv,     lexeme::Indep    },
+        {U"this"sv,      lexeme::This     },
+        {U"true"sv,      lexeme::True     },
+        {U"false"sv,     lexeme::False    },
+        {U"public"sv,    lexeme::Public   },
+        {U"protected"sv, lexeme::Protected},
+        {U"private"sv,   lexeme::Private  },
+        {U"import"sv,    lexeme::Import   },
+        {U"using"sv,     lexeme::Using    },
+        {U"reloc"sv,     lexeme::Reloc    },
+        {U"mov"sv,       lexeme::Mov      },
+        {U"trustme"sv,   lexeme::Trustme  },
+        {U"asm"sv,       lexeme::Asm      },
+    };
+    auto it = keywords.find(ident);
+    if (it == keywords.end()) return lexeme::Ident;
+    return it->second;
+}
+
+auto lex_xid_start() -> lexing<>
+{
+    auto ident = co_await lex_ident();
+    ident.type = match_ident(ident.view);
+    co_return ident;
+}
+
+auto lex_underscore() -> lexing<>
+{
+    assert_(co_await peek() == U'_', "expected _");
+    if (is_xid_continue(co_await peek(1))) {
+        co_return co_await lex_ident();
+    }
+    co_return store(1uz, lexeme::Underscore);
+}
+
+auto lex_token() -> lexing<>
+{
+    auto pk = co_await peek();
+    switch (pk) {
+    case char32_t{}:
+        co_return store(0uz, lexeme::None);
+    case U'/':
+        co_return co_await lex_slash();
+    case U'<':
+        co_return co_await lex_less();
+    case U'>':
+        co_return co_await lex_greater();
+    case U'+':
+        co_return co_await lex_plus();
+    case U'-':
+        co_return co_await lex_minus();
+    case U'|':
+        co_return co_await lex_pipe();
+    case U'&':
+        co_return co_await lex_ampersand();
+    case U'*':
+        co_return co_await lex_star();
+    case U'%':
+        co_return co_await lex_rem();
+    case U'^':
+        co_return co_await lex_caret();
+    case U'~':
+        co_return co_await lex_tilde();
+    case U'=':
+        co_return co_await lex_eq();
+    case U'!':
+        co_return co_await lex_not();
+    case U'.':
+        co_return co_await lex_dot();
+    case U':':
+        co_return co_await lex_colon();
+    case U'{':
+        co_return store(1uz, lexeme::LeftBrace);
+    case U'}':
+        co_return store(1uz, lexeme::RightBrace);
+    case U'(':
+        co_return store(1uz, lexeme::LeftParen);
+    case U')':
+        co_return store(1uz, lexeme::RightParen);
+    case U'[':
+        co_return store(1uz, lexeme::LeftBracket);
+    case U']':
+        co_return store(1uz, lexeme::RightBracket);
+    case U';':
+        co_return store(1uz, lexeme::Semicolon);
+    case U',':
+        co_return store(1uz, lexeme::Comma);
+    case U'?':
+        co_return store(1uz, lexeme::QuestionMark);
+    case U'@':
+        co_return store(1uz, lexeme::At);
+    case U'#':
+        co_return co_await lex_hash();
+    case U'$':
+        co_return store(1uz, lexeme::Dollar);
+    case U'0':
+        co_return co_await lex_zero();
+    case U'"':
+        co_return co_await lex_double_quot();
+    case U'\'':
+        co_return co_await lex_single_quot();
+    case U'_':
+        co_return co_await lex_underscore();
+    default:
+        if (is_digit(pk)) co_return co_await lex_digit();
+        if (is_xid_start(pk)) co_return co_await lex_xid_start();
+        co_return lex_fail("unknown character U+{:X}", static_cast<std::uint32_t>(pk));
+    }
+}
+
+auto lex_line() -> lexing<std::vector<token>>
+{
+    auto tokens   = std::vector<token>{};
+    auto filtered = std::array{
+        lexeme::LineComment,
+        lexeme::StreamComment,
+    };
+    while (!(co_await source_rem).empty()) {
+        co_await lex_skip();
+        auto tok = co_await lex_token();
+        if (std::ranges::contains(filtered, tok.type)) {
+            continue;
+        }
+        if (tok.type == lexeme::None) break;
+        tokens.emplace_back(tok);
+    }
+    co_return tokens;
+}
+
+auto lex_all(std::u32string_view source) -> std::expected<std::vector<token>, error_entry>
+{
+    auto lines = source | std::views::split(U'\n') | std::views::transform([](auto r) {
+                     return std::u32string_view{r};
+                 })
+                 | std::ranges::to<std::vector>();
+
+    auto tokens = std::vector<token>{};
+
+    for (auto lineno = 1uz, depth = 0uz; auto line : lines) {
+        auto lex = lex_line();
+        lex.resume(line, 0uz, {.lineno = lineno, .colno = 1uz}, depth);
+        if (lex.has_error()) {
+            return std::unexpected{lex.take_result().error()};
+        }
+        auto toks = lex.take_result().value();
+        tokens.append_range(std::move(toks));
+        ++lineno;
+        depth = lex.comment_depth();
+    }
+
+    return tokens;
 }
 
 struct token_tree
@@ -710,10 +1198,10 @@ public:
     private:
         source_span span_;
         lexeme type_;
-        std::string_view text_;
+        std::u32string_view text_;
 
     public:
-        token(source_span span, lexeme type, std::string_view text) : span_{span}, type_{type}, text_{text} {}
+        token(source_span span, lexeme type, std::u32string_view text) : span_{span}, type_{type}, text_{text} {}
 
         auto span() const -> source_span
         {
@@ -735,12 +1223,12 @@ public:
             type_ = type;
         }
 
-        auto text() const -> std::string_view
+        auto text() const -> std::u32string_view
         {
             return text_;
         }
 
-        auto set_text(std::string_view text) -> void
+        auto set_text(std::u32string_view text) -> void
         {
             text_ = text;
         }
@@ -870,7 +1358,7 @@ public:
         std::construct_at(&group_, std::move(g));
     }
 
-    token_tree(source_span span, lexeme type, std::string_view text)
+    token_tree(source_span span, lexeme type, std::u32string_view text)
         : token_tree{std::make_unique<token>(span, type, text)}
     {
     }
@@ -1050,8 +1538,8 @@ auto build_token_tree(std::span<const token> tokens, std::vector<error_entry>& e
                         }
                     };
                     merge(lexeme::Greater, lexeme::Greater, lexeme::RightShift);
-                    merge(lexeme::Greater, lexeme::Assignment, lexeme::GreaterEq);
-                    merge(lexeme::RightShift, lexeme::Assignment, lexeme::RightShiftEq);
+                    merge(lexeme::Greater, lexeme::Assign, lexeme::GreaterEq);
+                    merge(lexeme::RightShift, lexeme::Assign, lexeme::RightShiftEq);
                     if (type == lexeme::Less) {
                         angles.emplace_back(trees.size());
                     }

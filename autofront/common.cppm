@@ -4,6 +4,7 @@ import std;
 
 namespace ranges = std::ranges;
 namespace views  = std::views;
+using namespace std::literals;
 
 struct char_range
 {
@@ -28,6 +29,10 @@ constexpr auto xid_continues_delta = std::array{
 export namespace autofront
 {
 
+struct unit
+{
+};
+
 struct source_position
 {
     std::size_t lineno = 0uz;
@@ -41,6 +46,14 @@ struct source_position
         return {
             .lineno = lineno,
             .colno  = colno + n,
+        };
+    }
+
+    auto next_line_front() const -> source_position
+    {
+        return {
+            .lineno = lineno + 1uz,
+            .colno  = 1uz,
         };
     }
 };
@@ -77,7 +90,7 @@ struct comment
     kinds kind;
     source_position start;
     source_position end;
-    std::string text;
+    std::u32string_view text;
 };
 
 struct error_entry
@@ -361,6 +374,14 @@ public:
 
 template <typename T>
 just_awaitable(T x) -> just_awaitable<remove_rval_cref_t<T>>;
+
+auto assert_(bool pred, std::string_view msg, std::source_location l = std::source_location::current())
+{
+    if (pred) return;
+    std::println("assertion failed at {}:{}:{} ({}):", l.file_name(), l.line(), l.column(), l.function_name());
+    std::println("{}", msg);
+    std::terminate();
+}
 
 }
 
