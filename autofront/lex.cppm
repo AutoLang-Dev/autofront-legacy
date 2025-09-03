@@ -1190,6 +1190,20 @@ auto lex_all(std::u32string_view source) -> std::expected<std::vector<token>, er
     return tokens;
 }
 
+// 基于语法规则进行一定的预处理，以简化后续的语法分析
+// 例如：`:` 后随的 `<` 总是 `LeftAngle`，而非 `Less`
+auto preprocess(std::span<token> tokens) -> void
+{
+    if (tokens.empty()) return;
+    for (auto i : std::views::iota(1uz, tokens.size())) {
+        auto& cur  = tokens[i];
+        auto& prev = tokens[i - 1uz];
+        if (prev.type == lexeme::Colon && cur.type == lexeme::Less) {
+            cur.type = lexeme::LeftAngle;
+        }
+    }
+}
+
 struct token_tree
 {
 public:
