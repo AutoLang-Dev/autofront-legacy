@@ -999,9 +999,54 @@ auto lex_zero() -> lexing<>
     co_return store(j, lex);
 }
 
-auto lex_esc_seq() -> lexing<>
+// 返回值替换原下标
+auto lex_esc_seq(std::size_t j) -> lexing<std::size_t>
 {
-    co_return lex_fail("not impl");
+    assert_(co_await peek(j) == '\\', "expected \\");
+    ++j;
+    auto pk = co_await peek(j);
+    if (U"n\\"sv.contains(pk)) {
+        co_return j + 1uz;
+    }
+    if (pk == U'{') {
+        ++j;
+        auto codepoint = std::uint32_t{};
+        for (auto k = 0uz; k < 6uz; ++k, ++j) {
+            auto ch = co_await peek(j);
+            if (!is_xdigit(ch)) {
+                if (k == 0uz) {
+                    co_return lex_fail(j,
+                                       "expected at least one hex digit, but U+{:X} found",
+                                       static_cast<std::uint32_t>(ch));
+                }
+                ++j;
+                break;
+            }
+            auto digit = static_cast<std::uint32_t>([ch] -> char32_t {
+                if (is_digit(ch)) {
+                    return ch;
+                }
+                if (U'A' <= ch && ch <= U'F') {
+                    return ch - U'A';
+                }
+                if (U'a' <= ch && ch <= U'f') {
+                    return ch - U'a';
+                }
+                std::unreachable();
+            }());
+
+            codepoint *= 16uz;
+            codepoint += digit;
+        }
+        if (codepoint > 0x10FFFF) { // 要求在 Unicode 字符集内
+            co_return lex_fail(j, "out of the Unicode character set range, should not exceed 0x10FFFF");
+        }
+        if (auto pk = co_await peek(j); pk != U'}') {
+            co_return lex_fail(j, "expected a }}, but U+{:X} found", static_cast<std::uint32_t>(pk));
+        }
+        co_return j;
+    }
+    co_return lex_fail(j, "expected a n or \\ or {{, but U+{:X} found", static_cast<std::uint32_t>(pk));
 }
 
 auto lex_single_quot() -> lexing<>
