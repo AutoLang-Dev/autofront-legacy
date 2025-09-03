@@ -1466,7 +1466,7 @@ auto build_token_tree(std::span<const token> tokens, std::vector<error_entry>& e
     auto last_pos = tokens.back().span().end;
 
     auto next = [&tokens](std::size_t n = 1uz) {
-        tokens = tokens.subspan(n);
+        tokens = tokens.subspan(std::min(n, tokens.size()));
     };
     auto build = [&](this auto&& build, token_tree::delimiter delim) -> token_tree {
         auto angles = std::vector<std::size_t>{};
