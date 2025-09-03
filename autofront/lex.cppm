@@ -1306,6 +1306,16 @@ public:
             }
             return ret;
         }
+
+        auto without_delim(this auto& self)
+        {
+            auto span = std::span{self.children_};
+            if (self.delim_ == delimiter::none) {
+                return span;
+            }
+            assert_(span.size() >= 2uz, "expected token");
+            return span.subspan(1uz, span.size() - 2uz);
+        }
     };
 
     enum struct kind : std::uint8_t
