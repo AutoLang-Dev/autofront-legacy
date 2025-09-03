@@ -335,7 +335,13 @@ struct lexing_i_t
 
 struct lexing_pos_t
 {
-} lexing_pos;
+    std::size_t offset;
+};
+
+auto lexing_pos(std::size_t offset = 0uz) -> lexing_pos_t
+{
+    return {.offset = offset};
+}
 
 struct storing_token
 {
