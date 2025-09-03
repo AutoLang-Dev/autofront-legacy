@@ -371,6 +371,30 @@ auto start_with(std::u32string_view sv) -> starting_with
     };
 }
 
+struct lexing_failure
+{
+    std::size_t offset;
+    std::string message;
+};
+
+template <typename... Args>
+auto lex_fail(std::format_string<Args...> fmt, Args&&... args) -> lexing_failure
+{
+    return {
+        .offset  = 0uz,
+        .message = std::format(fmt, std::forward<Args>(args)...),
+    };
+}
+
+template <typename... Args>
+auto lex_fail(std::size_t offset, std::format_string<Args...> fmt, Args&&... args) -> lexing_failure
+{
+    return {
+        .offset  = offset,
+        .message = std::format(fmt, std::forward<Args>(args)...),
+    };
+}
+
 template <typename T = token>
 struct [[nodiscard]] lexing
 {
@@ -412,9 +436,20 @@ struct [[nodiscard]] lexing
 
         auto return_value(error_entry err, std::source_location l = std::source_location::current()) -> void
         {
-            err.from  = l;
-            err.where = pos_;
-            result_   = std::move(err);
+            err.from = l;
+            if (err.where == source_position{}) {
+                err.where = pos_;
+            }
+            result_ = std::move(err);
+        }
+
+        auto return_value(lexing_failure fail, std::source_location l = std::source_location::current()) -> void
+        {
+            auto err = error_entry{
+                .where   = pos_.next(fail.offset),
+                .message = std::move(fail.message),
+            };
+            return_value(std::move(err), l);
         }
 
         auto initial_suspend() const noexcept -> std::suspend_always
@@ -464,9 +499,9 @@ struct [[nodiscard]] lexing
             return i_;
         }
 
-        auto await_transform(lexing_pos_t) -> just_awaitable<source_position>
+        auto await_transform(lexing_pos_t lp) -> just_awaitable<source_position>
         {
-            return pos_;
+            return pos_.next(lp.offset);
         }
 
         auto await_transform(source_rem_t) -> just_awaitable<std::u32string_view>
@@ -633,14 +668,6 @@ struct [[nodiscard]] lexing
         return promise().comment_depth_;
     }
 };
-
-template <typename... Args>
-auto lex_fail(std::format_string<Args...> fmt, Args&&... args) -> error_entry
-{
-    return {
-        .message = std::format(fmt, std::forward<Args>(args)...),
-    };
-}
 
 auto lex_ws() -> lexing<unit>
 {
@@ -966,16 +993,16 @@ auto lex_single_quot() -> lexing<>
     auto pk1 = co_await peek(1);
     auto pk2 = co_await peek(2);
     if (pk1 == U'\'') {
-        co_return lex_fail("character literal is empty");
+        co_return lex_fail(1uz, "character literal is empty");
     }
     if (pk1 == U'\n') {
-        co_return lex_fail("LF is not allowed in character literal");
+        co_return lex_fail(1uz, "LF is not allowed in character literal");
     }
     if (pk2 == char32_t{}) {
-        co_return lex_fail("unexpected end of file");
+        co_return lex_fail(2uz, "unexpected end of file");
     }
     if (pk2 != U'\'') {
-        co_return lex_fail("expected a ', but U+{:X} found", static_cast<std::uint32_t>(pk2));
+        co_return lex_fail(2uz, "expected a ', but U+{:X} found", static_cast<std::uint32_t>(pk2));
     }
     co_return store(3uz, lexeme::CharLit);
 }
@@ -987,13 +1014,13 @@ auto lex_double_quot() -> lexing<>
     for (;; ++j) {
         auto pk = co_await peek(j);
         if (pk == char32_t{}) {
-            co_return lex_fail("unexpected end of file");
+            co_return lex_fail(j, "unexpected end of file");
         }
         if (pk == U'"') {
             co_return store(j + 1uz, lexeme::StrLit);
         }
         if (pk == U'\n') {
-            co_return lex_fail("LF is not allowed in string literal");
+            co_return lex_fail(j, "LF is not allowed in string literal");
         }
     }
 }
