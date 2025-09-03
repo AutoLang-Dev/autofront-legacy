@@ -1052,21 +1052,22 @@ auto lex_esc_seq(std::size_t j) -> lexing<std::size_t>
 auto lex_single_quot() -> lexing<>
 {
     assert_(co_await peek() == '\'', "expected :");
-    auto pk1 = co_await peek(1);
-    auto pk2 = co_await peek(2);
-    if (pk1 == U'\'') {
+    auto j = 1uz;
+    if (auto pk = co_await peek(j); pk == char32_t{}) {
+        co_return lex_fail(j, "unexpected enf of line");
+    } else if (pk == '\\') {
+        j = co_await lex_esc_seq(j);
+    } else if (pk == U'\'') {
         co_return lex_fail(1uz, "character literal is empty");
+    } else {
+        ++j;
     }
-    if (pk1 == U'\n') {
-        co_return lex_fail(1uz, "LF is not allowed in character literal");
+    if (auto pk = co_await peek(j); pk == char32_t{}) {
+        co_return lex_fail(j, "unexpected end of line");
+    } else if (pk != U'\'') {
+        co_return lex_fail(j, "expected a ', but U+{:X} found", static_cast<std::uint32_t>(pk));
     }
-    if (pk2 == char32_t{}) {
-        co_return lex_fail(2uz, "unexpected end of file");
-    }
-    if (pk2 != U'\'') {
-        co_return lex_fail(2uz, "expected a ', but U+{:X} found", static_cast<std::uint32_t>(pk2));
-    }
-    co_return store(3uz, lexeme::CharLit);
+    co_return store(j + 1uz, lexeme::CharLit);
 }
 
 auto lex_double_quot() -> lexing<>
