@@ -965,27 +965,34 @@ auto lex_zero() -> lexing<>
 
     auto kind = co_await peek(1);
 
-    auto j = 2uz;
+    auto j   = 2uz;
+    auto lex = lexeme::None;
     if (kind == U'x' || kind == U'X') {
         while (is_xdigit(co_await peek(j))) ++j;
-        co_return store(j, lexeme::HexLit);
-    }
-    if (kind == U'd' || kind == U'D') {
+        lex = lexeme::HexLit;
+    } else if (kind == U'd' || kind == U'D') {
         while (is_digit(co_await peek(j))) ++j;
-        co_return store(j, lexeme::DecLit);
-    }
-    if (kind == U'o' || kind == U'O') {
+        lex = lexeme::DecLit;
+    } else if (kind == U'o' || kind == U'O') {
         while (is_oct(co_await peek(j))) ++j;
-        co_return store(j, lexeme::OctLit);
-    }
-    if (kind == U'b' || kind == U'B') {
+        if (auto pk = co_await peek(j); pk == U'8' || pk == U'9') {
+            auto ch = static_cast<char>(pk);
+            co_return lex_fail(j, "expected a 0~7, but {} found", ch);
+        }
+        lex = lexeme::OctLit;
+    } else if (kind == U'b' || kind == U'B') {
         while (is_bin(co_await peek(j))) ++j;
-        co_return store(j, lexeme::BinLit);
+        if (auto pk = co_await peek(j); U'2' <= pk && pk <= U'9') {
+            auto ch = static_cast<char>(pk);
+            co_return lex_fail(j, "expected a 0 or 1, but {} found", ch);
+        }
+        lex = lexeme::BinLit;
+    } else co_return co_await lex_digit();
+
+    if (j == 2uz) {
+        co_return lex_fail(j, "expected a digit in the corresponding base");
     }
-    if (is_digit(kind)) {
-        co_return co_await lex_digit();
-    }
-    co_return lex_fail("expected x / d / o / b, but U+{:X} found", static_cast<std::uint32_t>(kind));
+    co_return store(j, lex);
 }
 
 auto lex_esc_seq() -> lexing<>
