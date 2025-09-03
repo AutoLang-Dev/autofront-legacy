@@ -992,6 +992,10 @@ auto lex_zero() -> lexing<>
     if (j == 2uz) {
         co_return lex_fail(j, "expected a digit in the corresponding base");
     }
+    if (auto pk = co_await peek(j); pk == U'_' || is_xid_start(pk)) {
+        ++j;
+        while (is_xid_continue(co_await peek(j))) ++j;
+    }
     co_return store(j, lex);
 }
 
@@ -1043,6 +1047,10 @@ auto lex_digit() -> lexing<>
     assert_(is_digit(co_await peek()), "expected a digit");
     auto j = 1uz;
     while (is_digit(co_await peek(j))) ++j;
+    if (auto pk = co_await peek(j); pk == U'_' || is_xid_start(pk)) {
+        ++j;
+        while (is_xid_continue(co_await peek(j))) ++j;
+    }
     co_return store(j, lexeme::DecLit);
 }
 
