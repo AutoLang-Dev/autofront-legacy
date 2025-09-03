@@ -1447,13 +1447,13 @@ public:
 
 auto build_token_tree(std::span<const token> tokens, std::vector<error_entry>& errors) -> token_tree
 {
-    static const auto lefts = std::map<lexeme, token_tree::delimiter>{
+    static const auto lefts = std::flat_map<lexeme, token_tree::delimiter>{
         {lexeme::LeftBrace,   token_tree::delimiter::brace  },
         {lexeme::LeftBracket, token_tree::delimiter::bracket},
         {lexeme::LeftParen,   token_tree::delimiter::paren  },
         {lexeme::LeftAngle,   token_tree::delimiter::angle  },
     };
-    static const auto rights = std::map<lexeme, token_tree::delimiter>{
+    static const auto rights = std::flat_map<lexeme, token_tree::delimiter>{
         {lexeme::RightBrace,   token_tree::delimiter::brace  },
         {lexeme::RightBracket, token_tree::delimiter::bracket},
         {lexeme::RightParen,   token_tree::delimiter::paren  },
