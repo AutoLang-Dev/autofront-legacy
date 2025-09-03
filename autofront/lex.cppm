@@ -1472,12 +1472,11 @@ auto build_token_tree(std::span<const token> tokens, std::vector<error_entry>& e
         auto angles = std::vector<std::size_t>{};
         auto trees  = std::vector<token_tree>{};
         if (delim != token_tree::delimiter::none) {
-            // contract_assert(!tokens.empty());
-
+            assert_(!tokens.empty(), "expected tokens");
             auto&& cur_tok = tokens.front();
 
             auto [text, pos, type] = cur_tok;
-            // contract_assert(lefts.contains(type) && lefts.at(type) == delim);
+            assert_(lefts.contains(type) && lefts.at(type) == delim, "expected matching delimiter");
             trees.emplace_back(cur_tok.span(), type, text);
             next();
         }
@@ -1516,7 +1515,7 @@ auto build_token_tree(std::span<const token> tokens, std::vector<error_entry>& e
                         trees | views::drop(idx) | views::as_rvalue,
                     };
                     trees.resize(idx);
-                    // contract_assert(in_angle.front().get_token());
+                    assert_(in_angle.front().get_token(), "expected token");
                     in_angle.front().get_token()->set_type(lexeme::LeftAngle);
                     in_angle.emplace_back(cur_tok.span(), lexeme::RightAngle, text);
 
