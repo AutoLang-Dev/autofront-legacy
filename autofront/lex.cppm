@@ -1291,30 +1291,20 @@ public:
             return delim_;
         }
 
-        auto children() -> std::span<token_tree>
+        auto children(this auto&& self)
         {
-            return children_;
+            return std::span{self.children_};
         }
 
-        auto children() const -> std::span<const token_tree>
+        auto children(this auto& self, std::size_t i)
         {
-            return children_;
-        }
-
-        auto children(std::size_t i) -> token_tree*
-        {
-            if (!(i < children_.size())) {
-                return nullptr;
+            auto ret = self.children_.data();
+            if (i < self.children_.size()) {
+                ret += i;
+            } else {
+                ret = nullptr;
             }
-            return &children_[i];
-        }
-
-        auto children(std::size_t i) const -> const token_tree*
-        {
-            if (!(i < children_.size())) {
-                return nullptr;
-            }
-            return &children_[i];
+            return ret;
         }
     };
 
