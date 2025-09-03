@@ -1523,6 +1523,14 @@ auto build_token_tree(std::span<const token> tokens, std::vector<error_entry>& e
                                        in_angle.back().span(),
                                        token_tree::delimiter::angle,
                                        std::move(in_angle));
+                } else if (type == lexeme::Greater && delim == token_tree::delimiter::angle) {
+                    trees.emplace_back(cur_tok.span(), type, text);
+                    return {
+                        trees.front().span(),
+                        trees.back().span(),
+                        delim,
+                        std::move(trees),
+                    };
                 } else {
                     auto merge = [&](lexeme prev, lexeme cur, lexeme merged) {
                         if (trees.empty()) return;
