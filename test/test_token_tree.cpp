@@ -145,16 +145,14 @@ auto compile(std::string_view source_utf8)
 
     preprocess(tokens);
 
-    auto errors = std::vector<error_entry>{};
-
-    auto tree = build_token_tree(tokens, errors);
-    if (!errors.empty()) {
-        for (auto&& error : errors) {
+    auto result = build_token_tree(tokens);
+    if (!result) {
+        for (auto&& error : result.error()) {
             print_error(lines, error);
         }
         return;
     }
-    print_tree(tree);
+    print_tree(result.value());
 }
 
 }
