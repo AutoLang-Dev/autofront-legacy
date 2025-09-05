@@ -1385,6 +1385,11 @@ public:
             return delim_;
         }
 
+        auto size() const -> std::size_t
+        {
+            return children_.size();
+        }
+
         auto children(this auto&& self)
         {
             return std::span{self.children_};
