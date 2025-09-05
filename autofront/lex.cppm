@@ -1072,17 +1072,19 @@ auto lex_double_quot() -> lexing<>
 {
     assert_(co_await peek() == U'"', "expected \"");
     auto j = 1uz;
-    for (;; ++j) {
+    while (true) {
         auto pk = co_await peek(j);
         if (pk == char32_t{}) {
-            co_return lex_fail(j, "unexpected end of file");
+            co_return lex_fail(j, "unexpected end of line");
         }
         if (pk == U'"') {
             co_return store(j + 1uz, lexeme::StrLit);
         }
-        if (pk == U'\n') {
-            co_return lex_fail(j, "LF is not allowed in string literal");
+        if (pk == U'\\') {
+            j = co_await lex_esc_seq(j);
+            continue;
         }
+        ++j;
     }
 }
 
