@@ -1558,7 +1558,7 @@ public:
     }
 };
 
-auto build_token_tree(std::span<const token> tokens, std::vector<error_entry>& errors) -> token_tree
+auto build_token_tree(std::span<const token> tokens) -> std::expected<token_tree, std::vector<error_entry>>
 {
     static const auto lefts = std::flat_map<lexeme, token_tree::delimiter>{
         {lexeme::LeftBrace,   token_tree::delimiter::brace  },
@@ -1577,6 +1577,8 @@ auto build_token_tree(std::span<const token> tokens, std::vector<error_entry>& e
         return {};
     }
     auto last_pos = tokens.back().span().end;
+
+    auto errors = std::vector<error_entry>{};
 
     auto next = [&tokens](std::size_t n = 1uz) {
         tokens = tokens.subspan(std::min(n, tokens.size()));
@@ -1691,7 +1693,11 @@ auto build_token_tree(std::span<const token> tokens, std::vector<error_entry>& e
             std::move(trees),
         };
     };
-    return build(token_tree::delimiter::none);
+    auto tree = build(token_tree::delimiter::none);
+    if (!errors.empty()) {
+        return std::unexpected{std::move(errors)};
+    }
+    return tree;
 }
 
 }
