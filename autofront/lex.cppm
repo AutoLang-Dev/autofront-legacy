@@ -166,6 +166,32 @@ auto close_paren_type(lexeme l) -> lexeme
     }
 }
 
+auto is_open_paren(lexeme l) -> bool
+{
+    switch (l) {
+    case lexeme::LeftAngle:
+    case lexeme::LeftBrace:
+    case lexeme::LeftBracket:
+    case lexeme::LeftParen:
+        return true;
+    default:
+        return false;
+    }
+}
+
+auto is_close_paren(lexeme l) -> bool
+{
+    switch (l) {
+    case lexeme::RightAngle:
+    case lexeme::RightBrace:
+    case lexeme::RightBracket:
+    case lexeme::RightParen:
+        return true;
+    default:
+        return false;
+    }
+}
+
 auto is_operator(lexeme l) -> bool
 {
     return l <= lexeme::Not;
