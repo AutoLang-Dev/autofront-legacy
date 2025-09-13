@@ -84,6 +84,7 @@ enum struct lexeme : std::uint8_t
     Hash,
     Dollar,
     Underscore,
+    BoolLit,
     FloatLit,
     BinLit,
     DecLit,
@@ -132,6 +133,7 @@ enum struct lexeme : std::uint8_t
 auto is_literal(lexeme l) -> bool
 {
     switch (l) {
+    case lexeme::BoolLit:
     case lexeme::FloatLit:
     case lexeme::BinLit:
     case lexeme::OctLit:
@@ -282,6 +284,7 @@ auto std::formatter<autofront::lexeme, char>::format(const autofront::lexeme& l,
         AUTOFRONT_LEXEME_TO_STRING(Hash);
         AUTOFRONT_LEXEME_TO_STRING(Dollar);
         AUTOFRONT_LEXEME_TO_STRING(Underscore);
+        AUTOFRONT_LEXEME_TO_STRING(BoolLit);
         AUTOFRONT_LEXEME_TO_STRING(FloatLit);
         AUTOFRONT_LEXEME_TO_STRING(BinLit);
         AUTOFRONT_LEXEME_TO_STRING(OctLit);
@@ -1320,6 +1323,8 @@ auto preprocess(std::span<token> tokens) -> void
         auto& prev = tokens[i - 1uz];
         if (prev.type == lexeme::Colon && cur.type == lexeme::Less) {
             cur.type = lexeme::LeftAngle;
+        } else if (cur.view == U"false"sv || cur.view == U"true"sv) {
+            cur.type = lexeme::BoolLit;
         }
     }
 }
