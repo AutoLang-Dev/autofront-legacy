@@ -1,6 +1,7 @@
 export module autofront:common;
 
 import std;
+import :i18n;
 
 namespace ranges = std::ranges;
 namespace views  = std::views;
@@ -378,7 +379,7 @@ just_awaitable(T x) -> just_awaitable<remove_rval_cref_t<T>>;
 auto assert_(bool pred, std::string_view msg, std::source_location l = std::source_location::current())
 {
     if (pred) return;
-    std::println("assertion failed at {}:{}:{} ({}):", l.file_name(), l.line(), l.column(), l.function_name());
+    std::println("{}", i18n::assert_fail(l.file_name(), l.line(), l.column(), l.function_name()));
     std::println("{}", msg);
     std::terminate();
 }
