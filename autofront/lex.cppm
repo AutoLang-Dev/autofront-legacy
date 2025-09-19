@@ -413,21 +413,30 @@ struct lexing_failure
 };
 
 template <typename... Args>
-auto lex_fail(std::format_string<Args...> fmt, Args&&... args) -> lexing_failure
+auto lex_fail(std::size_t offset, std::string msg) -> lexing_failure
 {
     return {
-        .offset  = 0uz,
-        .message = std::format(fmt, std::forward<Args>(args)...),
+        .offset  = offset,
+        .message = std::move(msg),
     };
+}
+
+template <typename... Args>
+auto lex_fail(std::string msg) -> lexing_failure
+{
+    return lex_fail(0uz, std::move(msg));
+}
+
+template <typename... Args>
+auto lex_fail(std::format_string<Args...> fmt, Args&&... args) -> lexing_failure
+{
+    return lex_fail(std::format(fmt, std::forward<Args>(args)...));
 }
 
 template <typename... Args>
 auto lex_fail(std::size_t offset, std::format_string<Args...> fmt, Args&&... args) -> lexing_failure
 {
-    return {
-        .offset  = offset,
-        .message = std::format(fmt, std::forward<Args>(args)...),
-    };
+    return lex_fail(offset, std::format(fmt, std::forward<Args>(args)...));
 }
 
 template <typename T = token>
@@ -564,20 +573,20 @@ struct [[nodiscard]] lexing
             auto await_ready() -> bool
             {
                 if (!lexing_.is_stateful()) {
-                    throw lexing_exception{R"(using co_await for a stateless "lexing")"};
+                    throw lexing_exception{i18n::await_stateless_lexing()};
                 }
                 return false;
             }
 
             auto await_suspend(handle_t handle) -> bool
             {
-                assert_(lexing_.is_stateful(), R"(using co_await for a stateless "lexing")", l);
-                assert_(&promise_ == &handle.promise(), "two coro is not equal", l);
+                assert_(lexing_.is_stateful(), i18n::await_stateless_lexing(), l);
+                assert_(&promise_ == &handle.promise(), i18n::unequal_coro(), l);
 
                 auto&& lp = lexing_.promise();
                 lexing_.resume(promise_.source_, promise_.i_, promise_.pos_, promise_.comment_depth_);
 
-                assert_(lexing_.finished(), "lexinng is not finished", l);
+                assert_(lexing_.finished(), i18n::unfinished_lexing(), l);
                 if (lp.exception_) {
                     promise_.exception_ = std::move(lp.exception_);
                     return true;
@@ -591,7 +600,7 @@ struct [[nodiscard]] lexing
 
             auto await_resume() noexcept -> U
             {
-                assert_(lexing_.has_value(), "lexing is failed", l);
+                assert_(lexing_.has_value(), i18n::failed_lexing(), l);
 
                 auto&& lp               = lexing_.promise();
                 promise_.i_             = lp.i_;
@@ -620,7 +629,7 @@ struct [[nodiscard]] lexing
 
     auto promise() const noexcept -> promise_type&
     {
-        assert_(is_stateful(), "stateless lexing");
+        assert_(is_stateful(), i18n::stateless_lexing());
         return handle_.promise();
     }
 
@@ -680,13 +689,13 @@ struct [[nodiscard]] lexing
     auto take_result() const -> std::expected<T, error_entry>
     {
         if (!is_stateful()) {
-            throw lexing_exception{"stateless parsing"};
+            throw lexing_exception{i18n::stateless_lexing()};
         }
         if (auto& e = promise().exception_) {
             std::rethrow_exception(std::move(e));
         }
         if (!finished()) {
-            throw lexing_exception{"parsing is not finished"};
+            throw lexing_exception{i18n::unfinished_lexing()};
         }
         if (has_value()) {
             return std::move(std::get<T>(promise().result_));
@@ -698,7 +707,7 @@ struct [[nodiscard]] lexing
     auto comment_depth() const -> std::size_t
     {
         if (!is_stateful()) {
-            throw lexing_exception{"stateless parsing"};
+            throw lexing_exception{i18n::stateless_lexing()};
         }
         return promise().comment_depth_;
     }
@@ -752,7 +761,7 @@ auto lex_stream_comment() -> lexing<>
 {
     auto&& p      = co_await this_promise;
     auto line_rem = p.source_.substr(p.i_);
-    assert_(p.comment_depth_ || line_rem.starts_with(U"/*"sv), "expected /* or non-zero depth");
+    assert_(p.comment_depth_ || line_rem.starts_with(U"/*"sv), i18n::expected_stream_comment());
     auto j = 0uz;
     for (auto& depth = p.comment_depth_; j < line_rem.size(); ++j) {
         auto rem = line_rem.substr(j);
@@ -794,12 +803,12 @@ auto lex_skip() -> lexing<unit>
 
 auto lex_slash() -> lexing<>
 {
-    assert_(co_await peek() == U'/', "expected /");
+    assert_(co_await peek() == U'/', i18n::expected("/"));
     auto pk1 = co_await peek(1);
     // if (pk1 == U'/') co_return co_await lex_line_comment();
     // if (pk1 == U'*') co_return co_await lex_stream_comment();
-    assert_(pk1 != U'*', "unexpected /*");
-    assert_(pk1 != U'/', "unexpected //");
+    assert_(pk1 != U'*', i18n::unexpected("/*"));
+    assert_(pk1 != U'/', i18n::unexpected("//"));
     if (pk1 == U'=') co_return store(2uz, lexeme::DivEq);
     if (pk1 == U'|') co_return store(2uz, lexeme::DivSat);
     if (pk1 == U'%') co_return store(2uz, lexeme::DivWrap);
@@ -808,7 +817,7 @@ auto lex_slash() -> lexing<>
 
 auto lex_less() -> lexing<>
 {
-    assert_(co_await peek() == U'<', "expected <");
+    assert_(co_await peek() == U'<', i18n::expected("<"));
     auto pk1 = co_await peek(1);
     auto pk2 = co_await peek(2);
     if (pk1 == U'<') {
@@ -828,7 +837,7 @@ auto lex_less() -> lexing<>
 
 auto lex_greater() -> lexing<>
 {
-    assert_(co_await peek() == U'>', "expected >");
+    assert_(co_await peek() == U'>', i18n::expected(">"));
     // auto pk1 = co_await peek(1);
     // auto pk2 = co_await peek(2);
     // if (pk1 == U'>') {
@@ -845,7 +854,7 @@ auto lex_greater() -> lexing<>
 
 auto lex_plus() -> lexing<>
 {
-    assert_(co_await peek() == U'+', "expected +");
+    assert_(co_await peek() == U'+', i18n::expected("+"));
     auto pk1 = co_await peek(1);
     if (pk1 == U'+') co_return store(2uz, lexeme::Inc);
     if (pk1 == U'=') co_return store(2uz, lexeme::AddEq);
@@ -856,7 +865,7 @@ auto lex_plus() -> lexing<>
 
 auto lex_minus() -> lexing<>
 {
-    assert_(co_await peek() == U'-', "expected -");
+    assert_(co_await peek() == U'-', i18n::expected("-"));
     auto pk1 = co_await peek(1);
     if (pk1 == U'-') co_return store(2uz, lexeme::Dec);
     if (pk1 == U'=') co_return store(2uz, lexeme::SubEq);
@@ -868,7 +877,7 @@ auto lex_minus() -> lexing<>
 
 auto lex_pipe() -> lexing<>
 {
-    assert_(co_await peek() == U'|', "expected |");
+    assert_(co_await peek() == U'|', i18n::expected("|"));
     auto pk1 = co_await peek(1);
     auto pk2 = co_await peek(2);
     if (pk1 == U'|') {
@@ -885,7 +894,7 @@ auto lex_pipe() -> lexing<>
 
 auto lex_ampersand() -> lexing<>
 {
-    assert_(co_await peek() == U'&', "expected &");
+    assert_(co_await peek() == U'&', i18n::expected("&"));
     auto pk1 = co_await peek(1);
     auto pk2 = co_await peek(2);
     if (pk1 == U'&') {
@@ -902,7 +911,7 @@ auto lex_ampersand() -> lexing<>
 
 auto lex_star() -> lexing<>
 {
-    assert_(co_await peek() == U'*', "expected *");
+    assert_(co_await peek() == U'*', i18n::expected("*"));
     auto pk1 = co_await peek(1);
     if (pk1 == U'=') co_return store(2uz, lexeme::MulEq);
     if (pk1 == U'|') co_return store(2uz, lexeme::MulSat);
@@ -912,7 +921,7 @@ auto lex_star() -> lexing<>
 
 auto lex_rem() -> lexing<>
 {
-    assert_(co_await peek() == U'%', "expected %");
+    assert_(co_await peek() == U'%', i18n::expected("%"));
     auto pk1 = co_await peek(1);
     if (pk1 == U'=') co_return store(2uz, lexeme::RemEq);
     co_return store(1uz, lexeme::Rem);
@@ -920,7 +929,7 @@ auto lex_rem() -> lexing<>
 
 auto lex_caret() -> lexing<>
 {
-    assert_(co_await peek() == U'^', "expected ^");
+    assert_(co_await peek() == U'^', i18n::expected("^"));
     auto pk1 = co_await peek(1);
     if (pk1 == U'=') co_return store(2uz, lexeme::XorEq);
     co_return store(1uz, lexeme::Caret);
@@ -928,7 +937,7 @@ auto lex_caret() -> lexing<>
 
 auto lex_tilde() -> lexing<>
 {
-    assert_(co_await peek() == U'~', "expected ~");
+    assert_(co_await peek() == U'~', i18n::expected("~"));
     auto pk1 = co_await peek(1);
     if (pk1 == U'=') co_return store(2uz, lexeme::BitNotEq);
     co_return store(1uz, lexeme::Tilde);
@@ -936,7 +945,7 @@ auto lex_tilde() -> lexing<>
 
 auto lex_eq() -> lexing<>
 {
-    assert_(co_await peek() == U'=', "expected =");
+    assert_(co_await peek() == U'=', i18n::expected("="));
     auto pk1 = co_await peek(1);
     if (pk1 == U'=') co_return store(2uz, lexeme::Eq);
     co_return store(1uz, lexeme::Assign);
@@ -944,7 +953,7 @@ auto lex_eq() -> lexing<>
 
 auto lex_not() -> lexing<>
 {
-    assert_(co_await peek() == U'!', "expected !");
+    assert_(co_await peek() == U'!', i18n::expected("!"));
     auto pk1 = co_await peek(1);
     if (pk1 == U'=') co_return store(2uz, lexeme::NotEq);
     co_return store(1uz, lexeme::Not);
@@ -952,7 +961,7 @@ auto lex_not() -> lexing<>
 
 auto lex_dot() -> lexing<>
 {
-    assert_(co_await peek() == U'.', "expected .");
+    assert_(co_await peek() == U'.', i18n::expected("."));
     auto pk1 = co_await peek(1);
     auto pk2 = co_await peek(2);
     if (pk1 == U'.') {
@@ -967,7 +976,7 @@ auto lex_dot() -> lexing<>
 
 auto lex_colon() -> lexing<>
 {
-    assert_(co_await peek() == U':', "expected :");
+    assert_(co_await peek() == U':', i18n::expected(":"));
     auto pk1 = co_await peek(1);
     if (pk1 == U':') co_return store(2uz, lexeme::Scope);
     co_return store(1uz, lexeme::Colon);
@@ -977,13 +986,13 @@ auto lex_digit() -> lexing<>;
 
 auto lex_hash() -> lexing<>
 {
-    assert_(co_await peek() == U'#', "expected #");
-    co_return lex_fail("not impl");
+    assert_(co_await peek() == U'#', i18n::expected("#"));
+    co_return lex_fail(i18n::not_impl());
 }
 
 auto lex_zero() -> lexing<>
 {
-    assert_(co_await peek() == '0', "expected 0");
+    assert_(co_await peek() == '0', i18n::expected("0"));
 
     auto is_oct = [](char32_t ch) {
         return U'0' <= ch && ch <= U'7';
@@ -1006,20 +1015,20 @@ auto lex_zero() -> lexing<>
         while (is_oct(co_await peek(j))) ++j;
         if (auto pk = co_await peek(j); pk == U'8' || pk == U'9') {
             auto ch = static_cast<char>(pk);
-            co_return lex_fail(j, "expected a 0~7, but {} found", ch);
+            co_return lex_fail(j, i18n::expected_found("0~7", ch));
         }
         lex = lexeme::OctLit;
     } else if (kind == U'b' || kind == U'B') {
         while (is_bin(co_await peek(j))) ++j;
         if (auto pk = co_await peek(j); U'2' <= pk && pk <= U'9') {
             auto ch = static_cast<char>(pk);
-            co_return lex_fail(j, "expected a 0 or 1, but {} found", ch);
+            co_return lex_fail(j, i18n::expected_found("0~1", ch));
         }
         lex = lexeme::BinLit;
     } else co_return co_await lex_digit();
 
     if (j == 2uz) {
-        co_return lex_fail(j, "expected a digit in the corresponding base");
+        co_return lex_fail(j, i18n::expected_digit_in_base());
     }
     if (auto pk = co_await peek(j); pk == U'_' || is_xid_start(pk)) {
         ++j;
@@ -1032,7 +1041,7 @@ auto lex_zero() -> lexing<>
 auto lex_esc_seq(std::size_t j) -> lexing<std::size_t>
 {
     constexpr auto unicode_limit = 0x10FFFF;
-    assert_(co_await peek(j) == '\\', "expected \\");
+    assert_(co_await peek(j) == '\\', i18n::expected("\\"));
     ++j;
     auto pk = co_await peek(j);
     if (U"n\\\'\""sv.contains(pk)) {
@@ -1045,7 +1054,7 @@ auto lex_esc_seq(std::size_t j) -> lexing<std::size_t>
             auto ch = co_await peek(j);
             if (!is_xdigit(ch)) {
                 if (k == 0uz) {
-                    co_return lex_fail(j, "expected hex digit, but U+{:X} found", static_cast<std::uint32_t>(ch));
+                    co_return lex_fail(j, i18n::expected_hex_digit(static_cast<std::uint32_t>(ch)));
                 }
                 break;
             }
@@ -1061,50 +1070,50 @@ auto lex_esc_seq(std::size_t j) -> lexing<std::size_t>
                 }
                 std::unreachable();
             }());
-            
+
             codepoint *= 16uz;
             codepoint += digit;
         }
         if (codepoint > unicode_limit) { // 要求在 Unicode 字符集内
-            co_return lex_fail(j, "out of the Unicode character set range, should not exceed 0x10FFFF");
+            co_return lex_fail(j, i18n::out_of_unicode_range(std::format("U+{:X}", codepoint)));
         }
         if (auto pk = co_await peek(j); pk != U'}') {
-            co_return lex_fail(j, "expected a }}, but U+{:X} found", static_cast<std::uint32_t>(pk));
+            co_return lex_fail(j, i18n::expected_found("}", std::format("U+{:X}", static_cast<std::uint32_t>(pk))));
         }
         co_return j;
     }
-    co_return lex_fail(j, "expected a n or \\ or {{, but U+{:X} found", static_cast<std::uint32_t>(pk));
+    co_return lex_fail(j, i18n::expected_esc_seq(std::format("U+{:X}", static_cast<std::uint32_t>(pk))));
 }
 
 auto lex_single_quot() -> lexing<>
 {
-    assert_(co_await peek() == '\'', "expected :");
+    assert_(co_await peek() == '\'', i18n::expected(":"));
     auto j = 1uz;
     if (auto pk = co_await peek(j); pk == char32_t{}) {
-        co_return lex_fail(j, "unexpected enf of line");
+        co_return lex_fail(j, i18n::unexpected_eol());
     } else if (pk == '\\') {
         j = co_await lex_esc_seq(j);
     } else if (pk == U'\'') {
-        co_return lex_fail(1uz, "character literal is empty");
+        co_return lex_fail(1uz, i18n::empty_char_lit());
     } else {
         ++j;
     }
     if (auto pk = co_await peek(j); pk == char32_t{}) {
-        co_return lex_fail(j, "unexpected end of line");
+        co_return lex_fail(j, i18n::unexpected_eol());
     } else if (pk != U'\'') {
-        co_return lex_fail(j, "expected a ', but U+{:X} found", static_cast<std::uint32_t>(pk));
+        co_return lex_fail(j, i18n::expected_found("'", std::format("U+{:X}", static_cast<std::uint32_t>(pk))));
     }
     co_return store(j + 1uz, lexeme::CharLit);
 }
 
 auto lex_double_quot() -> lexing<>
 {
-    assert_(co_await peek() == U'"', "expected \"");
+    assert_(co_await peek() == U'"', i18n::expected("\""));
     auto j = 1uz;
     while (true) {
         auto pk = co_await peek(j);
         if (pk == char32_t{}) {
-            co_return lex_fail(j, "unexpected end of line");
+            co_return lex_fail(j, i18n::unexpected_eol());
         }
         if (pk == U'"') {
             co_return store(j + 1uz, lexeme::StrLit);
@@ -1119,7 +1128,7 @@ auto lex_double_quot() -> lexing<>
 
 auto lex_digit() -> lexing<>
 {
-    assert_(is_digit(co_await peek()), "expected a digit");
+    assert_(is_digit(co_await peek()), i18n::expected_digit());
     auto j = 1uz;
     while (is_digit(co_await peek(j))) ++j;
     if (auto pk = co_await peek(j); pk == U'_' || is_xid_start(pk)) {
@@ -1132,7 +1141,7 @@ auto lex_digit() -> lexing<>
 auto lex_ident() -> lexing<>
 {
     auto pk = co_await peek();
-    assert_(pk == U'_' || is_xid_start(pk), "expected XID_Start or _");
+    assert_(pk == U'_' || is_xid_start(pk), i18n::expected_ident_start());
     auto j = 1uz;
     while (is_xid_continue(co_await peek(j))) {
         ++j;
@@ -1188,7 +1197,7 @@ auto lex_xid_start() -> lexing<>
 
 auto lex_underscore() -> lexing<>
 {
-    assert_(co_await peek() == U'_', "expected _");
+    assert_(co_await peek() == U'_', i18n::expected("_"));
     if (is_xid_continue(co_await peek(1))) {
         co_return co_await lex_ident();
     }
@@ -1266,7 +1275,7 @@ auto lex_token() -> lexing<>
     default:
         if (is_digit(pk)) co_return co_await lex_digit();
         if (is_xid_start(pk)) co_return co_await lex_xid_start();
-        co_return lex_fail("unknown character U+{:X}", static_cast<std::uint32_t>(pk));
+        co_return lex_fail(i18n::unknown_char(std::format("U+{:X}", static_cast<std::uint32_t>(pk))));
     }
 }
 
@@ -1618,11 +1627,11 @@ auto build_token_tree(std::span<const token> tokens) -> std::expected<token_tree
         auto angles = std::vector<std::size_t>{};
         auto trees  = std::vector<token_tree>{};
         if (delim != token_tree::delimiter::none) {
-            assert_(!tokens.empty(), "expected tokens");
+            assert_(!tokens.empty(), i18n::expected_tokens());
             auto&& cur_tok = tokens.front();
 
             auto [text, pos, type] = cur_tok;
-            assert_(lefts.contains(type) && lefts.at(type) == delim, "expected matching delimiter");
+            assert_(lefts.contains(type) && lefts.at(type) == delim, i18n::expected_matching_delim());
             trees.emplace_back(cur_tok.span(), type, text);
             next();
         }
@@ -1648,7 +1657,7 @@ auto build_token_tree(std::span<const token> tokens) -> std::expected<token_tree
                 } else {
                     errors.push_back({
                         .where   = trees.back().span().start,
-                        .message = std::format("unexcepted {}", type),
+                        .message = i18n::unexpected(type),
                         .from    = std::source_location::current(),
                     });
                 }
@@ -1661,7 +1670,7 @@ auto build_token_tree(std::span<const token> tokens) -> std::expected<token_tree
                         trees | views::drop(idx) | views::as_rvalue,
                     };
                     trees.resize(idx);
-                    assert_(in_angle.front().get_token(), "expected token");
+                    assert_(in_angle.front().get_token(), i18n::expected_token());
                     in_angle.front().get_token()->set_type(lexeme::LeftAngle);
                     in_angle.emplace_back(cur_tok.span(), lexeme::RightAngle, text);
 
@@ -1712,7 +1721,7 @@ auto build_token_tree(std::span<const token> tokens) -> std::expected<token_tree
             }();
             errors.push_back({
                 .where   = last_pos,
-                .message = std::format("excepted {}", expected),
+                .message = i18n::expected(expected),
                 .from    = std::source_location::current(),
             });
             return {};

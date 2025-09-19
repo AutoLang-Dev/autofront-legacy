@@ -1,1 +1,28 @@
 TR(assert_fail, "assertion failed at {}:{}:{} ({}):")
+TR(unequal_coro, "two coro is not equal")
+TR(not_impl, "not impl")
+
+TR(await_stateless_lexing, "using co_await for a stateless `lexing`")
+TR(unfinished_lexing, "lexing is unfinished")
+TR(failed_lexing, "lexing is failed")
+TR(stateless_lexing, "stateless `lexing`")
+
+TR(expected_stream_comment, "expected /* or non-zero depth")
+
+TR(expected, "expected {}")
+TR(expected_found, "expected {}, but {} found")
+TR(unexpected, "unexpected {}")
+
+TR(expected_digit_in_base, "expected a digit in the corresponding base")
+TR(expected_hex_digit, "expected hex digit, but {} found")
+TR(out_of_unicode_range, "{} is out of the Unicode character set range, should not exceed U+10FFFF")
+TR(expected_esc_seq, "expected a n or \\ or {{, but {} found")
+TR(unexpected_eol, "unexpected end of line")
+TR(empty_char_lit, "character literal cannot be empty")
+TR(expected_digit, "expected digit")
+TR(expected_ident_start, "expected character with XID_Start attribute or _")
+TR(unknown_char, "unknown character {}")
+
+TR(expected_tokens, "expected tokens")
+TR(expected_matching_delim, "expected matching delimiter")
+TR(expected_token, "expected token")

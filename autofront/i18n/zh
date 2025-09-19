@@ -1,1 +1,28 @@
 TR(assert_fail, "位于 {}:{}:{} ({}) 的断言失败：")
+TR(unequal_coro, "两个协程不相同")
+TR(not_impl, "暂未实现")
+
+TR(await_stateless_lexing, "对无状态的 `lexing` 使用 `co_await`")
+TR(unfinished_lexing, "词法分析未完成")
+TR(failed_lexing, "词法分析失败")
+TR(stateless_lexing, "无状态的 `lexing`")
+
+TR(expected_stream_comment, "期待 /* 或者非零的注释深度")
+
+TR(expected, "期待 {}")
+TR(expected_found, "期待 {}，但得到了 {}")
+TR(unexpected, "不应出现于此的 {}")
+
+TR(expected_digit_in_base, "期待对应基数的数位")
+TR(expected_hex_digit, "期待十六进制数位，但得到了 {}")
+TR(out_of_unicode_range, "{} 超出 Unicode 字符集范围，最大应为 U+10FFFF")
+TR(expected_esc_seq, "期待 n 或 \\ 或 {{，但得到了 {}")
+TR(unexpected_eol, "过早结束的一行")
+TR(empty_char_lit, "字符字面量一定要有字符")
+TR(expected_digit, "期待数位")
+TR(expected_ident_start, "期待一个拥有 XID_Start 属性的字符或 _")
+TR(unknown_char, "未知的字符 {}")
+
+TR(expected_tokens, "期待一系列词元")
+TR(expected_matching_delim, "期待匹配的分隔符")
+TR(expected_token, "期待一个词元")
