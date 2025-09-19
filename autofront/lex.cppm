@@ -346,6 +346,11 @@ struct token
     {
         return source_span::make(pos, view.size());
     }
+
+    auto str() const -> std::u32string
+    {
+        return std::u32string{view};
+    }
 };
 
 struct peeking
@@ -1373,6 +1378,11 @@ public:
         auto set_text(std::u32string_view text) -> void
         {
             text_ = text;
+        }
+
+        auto str() const -> std::u32string
+        {
+            return std::u32string{text_};
         }
     };
 
