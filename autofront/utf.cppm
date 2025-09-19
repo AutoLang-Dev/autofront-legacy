@@ -242,6 +242,17 @@ constexpr auto iterate_utf8(Iter first, Sentinel last) noexcept
     return std::ranges::subrange{iterate_utf8(std::move(first)), std::move(last)};
 }
 
+auto utf32_to_utf8(std::u32string_view sv) -> std::string
+{
+    auto result = std::string{};
+    for (auto ch : sv) {
+        auto buf = std::array<char, 4uz>{};
+        auto end = utf::utf32_to_utf8(ch, buf.begin());
+        result.append_range(std::string_view{buf.begin(), end});
+    }
+    return result;
+}
+
 }
 
 struct from_utf8_to_utf32_t : std::ranges::range_adaptor_closure<from_utf8_to_utf32_t>
