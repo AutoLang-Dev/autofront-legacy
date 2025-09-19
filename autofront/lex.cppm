@@ -1030,10 +1030,6 @@ auto lex_zero() -> lexing<>
     if (j == 2uz) {
         co_return lex_fail(j, i18n::expected_digit_in_base());
     }
-    if (auto pk = co_await peek(j); pk == U'_' || is_xid_start(pk)) {
-        ++j;
-        while (is_xid_continue(co_await peek(j))) ++j;
-    }
     co_return store(j, lex);
 }
 
@@ -1131,10 +1127,6 @@ auto lex_digit() -> lexing<>
     assert_(is_digit(co_await peek()), i18n::expected_digit());
     auto j = 1uz;
     while (is_digit(co_await peek(j))) ++j;
-    if (auto pk = co_await peek(j); pk == U'_' || is_xid_start(pk)) {
-        ++j;
-        while (is_xid_continue(co_await peek(j))) ++j;
-    }
     co_return store(j, lexeme::DecLit);
 }
 
@@ -1334,6 +1326,8 @@ auto preprocess(std::span<token> tokens) -> void
             cur.type = lexeme::LeftAngle;
         } else if (cur.view == U"false"sv || cur.view == U"true"sv) {
             cur.type = lexeme::BoolLit;
+        } else if (is_literal(prev.type) && cur.type == lexeme::Ident && prev.span().end == cur.pos) {
+            cur.type = lexeme::LitSuf;
         }
     }
 }
