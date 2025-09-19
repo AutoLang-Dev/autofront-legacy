@@ -268,10 +268,19 @@ struct from_utf8_to_utf32_t : std::ranges::range_adaptor_closure<from_utf8_to_ut
 export namespace autofront
 {
 
-namespace ranges::views
+namespace ranges
 {
 
+using namespace std::ranges;
+
+namespace views
+{
+
+using namespace std::views;
+
 constexpr auto from_utf8_to_utf32 = from_utf8_to_utf32_t{};
+
+}
 
 }
 
