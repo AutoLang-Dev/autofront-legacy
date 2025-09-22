@@ -384,6 +384,77 @@ auto assert_(bool pred, std::string_view msg, std::source_location l = std::sour
     std::terminate();
 }
 
+struct indent_printer
+{
+protected:
+    std::size_t indent_ = 0;
+    bool new_line       = true;
+
+    auto print_indent()
+    {
+        if (indent_) {
+            std::print("{:{}}", "", indent_);
+        }
+    }
+
+    auto indent(std::size_t n = 2uz)
+    {
+        struct guard
+        {
+        public:
+            guard(std::size_t& ref, std::size_t n) : ref_{ref}, n_{n}
+            {
+                ref_ += n_;
+            }
+            ~guard()
+            {
+                ref_ -= n_;
+            }
+
+        private:
+            std::size_t& ref_;
+            std::size_t n_;
+        };
+        return guard{indent_, n};
+    }
+
+    template <typename... Args>
+    auto print(std::format_string<Args...> fmt, Args&&... args)
+    {
+        if (new_line) {
+            print_indent();
+        }
+        std::print(fmt, std::forward<Args>(args)...);
+        new_line = false;
+    }
+
+    template <typename... Args>
+    auto println(std::format_string<Args...> fmt, Args&&... args)
+    {
+        if (new_line) {
+            print_indent();
+        }
+        std::println(fmt, std::forward<Args>(args)...);
+        new_line = true;
+    }
+
+    auto println()
+    {
+        std::println();
+        new_line = true;
+    }
+
+    auto indently_print(auto&& fn)
+    {
+        println("{{");
+        {
+            auto _ = indent();
+            fn();
+        }
+        print("}}");
+    }
+};
+
 }
 
 template <>
