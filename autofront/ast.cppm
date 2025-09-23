@@ -338,6 +338,13 @@ struct chain_expr
     }
 };
 
+struct asm_block
+{
+    DEF_ALIASES(asm_block)
+
+    std::vector<std::vector<std::u32string>> asms;
+};
+
 struct parameter
 {
     DEF_ALIASES(parameter)
@@ -360,7 +367,7 @@ struct fn_decl
 
     name::ptr name;
     fn_sign::ptr sign;
-    block_expr::ptr body;
+    std::variant<std::monostate, block_expr::ptr, asm_block::ptr> body;
 };
 
 struct trans_unit
@@ -530,6 +537,8 @@ struct naive_printer : indent_printer
 
     NAIVE_PRINT_DEF(block_expr, stmts)
 
+    NAIVE_PRINT_DEF(asm_block, asms)
+
     NAIVE_PRINT_DEF(fn_decl, name, sign, body)
 
     auto naive_print(const trans_unit::ptr& tu)
@@ -598,6 +607,11 @@ struct pretty_printer : indent_printer
         } else {
             print("{{}}");
         }
+    }
+
+    auto pretty_print(std::monostate)
+    {
+        print("{{}}");
     }
 
     auto pretty_print(bool flag)
@@ -854,6 +868,15 @@ struct pretty_printer : indent_printer
         indently_print([&] {
             pretty_print("pat", p->pat);
             if (p->type) pretty_print("type", p->type);
+        });
+    }
+
+    auto pretty_print(const asm_block::ptr& b)
+    {
+        print("AsmBlock ");
+        if (!b) return print("{{}}");
+        indently_print([&] {
+            pretty_println(b->asms);
         });
     }
 

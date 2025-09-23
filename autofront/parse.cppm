@@ -1010,6 +1010,45 @@ auto parse_stmt_list() -> parsing<ast::any_stmt::vec>
     co_return stmts;
 }
 
+auto parse_all_as_token() -> parsing<std::vector<const token_tree::token*>>
+{
+    auto ret = std::vector<const token_tree::token*>{};
+    while (!co_await is_end()) {
+        if (co_await is_token()) {
+            ret.push_back(co_await parse_token());
+        } else {
+            auto delim = (co_await peek_node())->get_group()->delim();
+            ret.append_range(co_await parse_group(parse_all_as_token(), delim));
+        }
+    }
+    co_return ret;
+}
+
+auto parse_asm() -> parsing<ast::asm_block::ptr>
+{
+    co_await parse_token(lexeme::Asm);
+    auto tokens = co_await parse_brace(parse_all_as_token());
+    auto view   = std::span{
+        ranges::next(tokens.begin()),
+        ranges::prev(tokens.end()),
+    };
+    auto asms = std::vector<std::vector<std::u32string>>{};
+    for (auto pos = source_position{}; auto last : view) {
+        assert_(last, i18n::deref_null());
+        auto start = last->span().start;
+        if (start.lineno != pos.lineno) {
+            asms.emplace_back();
+        }
+        auto& line = asms.back();
+        if (start.colno > pos.colno && !line.empty()) {
+            line.push_back(U" "s);
+        }
+        line.push_back(last->str());
+        pos = last->span().end;
+    }
+    co_return uniq(std::move(asms));
+}
+
 auto parse_block_expr() -> parsing<ast::block_expr::ptr>
 {
     co_return uniq(co_await parse_brace(parse_stmt_list()));
@@ -1020,8 +1059,19 @@ auto parse_fn_decl() -> parsing<ast::fn_decl::ptr>
     auto name = co_await parse_name();
     co_await parse_token(lexeme::Colon);
     auto sign = co_await parse_fn_sign();
-    co_await parse_token(lexeme::Assign);
-    auto body = co_await parse_block_expr();
+    auto body = decltype(ast::fn_decl::body){};
+    if (co_await is_token_of(lexeme::Assign)) {
+        co_await parse_token(lexeme::Assign);
+        if (co_await is_token_of(lexeme::Asm)) {
+            body = co_await parse_asm();
+        } else if (co_await is_group_of(token_tree::delimiter::brace)) {
+            body = co_await parse_block_expr();
+        } else {
+            co_return fail(i18n::expected_block_asm());
+        }
+    } else if (co_await is_token_of(lexeme::Semicolon)) {
+        co_await parse_token(lexeme::Semicolon);
+    } else co_return fail(i18n::expected_fn_body());
     co_return uniq(std::move(name), std::move(sign), std::move(body));
 }
 
