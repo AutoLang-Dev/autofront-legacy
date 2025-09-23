@@ -455,6 +455,12 @@ protected:
     }
 };
 
+template <typename... Ts>
+using sum = std::variant<std::unique_ptr<Ts>...>;
+
+template <typename... Ts>
+using optsum = std::variant<std::monostate, std::unique_ptr<Ts>...>;
+
 }
 
 template <>

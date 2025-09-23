@@ -90,7 +90,7 @@ struct pattern
 {
     DEF_ALIASES(pattern)
 
-    std::variant<name::ptr, underscore::ptr> pat;
+    sum<name, underscore> pat;
 };
 
 struct lit_bool
@@ -145,7 +145,7 @@ struct lit_expr
 {
     DEF_ALIASES(lit_expr)
 
-    std::variant<lit_bool::ptr, lit_float::ptr, lit_int::ptr, lit_str::ptr, lit_char::ptr> lit;
+    sum<lit_bool, lit_float, lit_int, lit_str, lit_char> lit;
 
     static auto need_semi() -> bool
     {
@@ -164,18 +164,18 @@ struct any_expr
 {
     DEF_ALIASES(any_expr)
 
-    std::variant<name::ptr,
-                 lit_expr::ptr,
-                 std::unique_ptr<block_expr>,
-                 std::unique_ptr<if_expr>,
-                 std::unique_ptr<while_expr>,
-                 std::unique_ptr<return_expr>,
-                 std::unique_ptr<break_expr>,
-                 std::unique_ptr<continue_expr>,
-                 std::unique_ptr<paren_expr>,
-                 std::unique_ptr<call_expr>,
-                 std::unique_ptr<bin_expr>,
-                 std::unique_ptr<chain_expr>>
+    sum<name,
+        lit_expr,
+        block_expr,
+        if_expr,
+        while_expr,
+        return_expr,
+        break_expr,
+        continue_expr,
+        paren_expr,
+        call_expr,
+        bin_expr,
+        chain_expr>
         expr;
 
     auto need_semi(this auto&& self) -> bool
@@ -206,7 +206,7 @@ struct any_stmt
 {
     DEF_ALIASES(any_stmt)
 
-    std::variant<local::ptr, any_expr::ptr, expr_stmt::ptr> stmt;
+    sum<local, any_expr, expr_stmt> stmt;
 };
 
 struct block_expr
@@ -225,7 +225,7 @@ struct else_expr
 {
     DEF_ALIASES(else_expr)
 
-    std::variant<block_expr::ptr, std::unique_ptr<if_expr>> body;
+    sum<block_expr, if_expr> body;
 };
 
 struct if_expr
@@ -330,7 +330,7 @@ struct chain_expr
 {
     DEF_ALIASES(chain_expr)
 
-    std::vector<std::variant<any_expr::ptr, operato::ptr>> chain;
+    std::vector<sum<any_expr, operato>> chain;
 
     static auto need_semi() -> bool
     {
@@ -367,7 +367,7 @@ struct fn_decl
 
     name::ptr name;
     fn_sign::ptr sign;
-    std::variant<std::monostate, block_expr::ptr, asm_block::ptr> body;
+    optsum<block_expr, asm_block> body;
 };
 
 struct trans_unit
