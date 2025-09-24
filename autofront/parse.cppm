@@ -218,7 +218,7 @@ struct parsing_promise
 
     auto return_value(T ret)
     {
-        result_ = parsing_success<T>{std::forward<decltype(ret)>(ret)};
+        result_ = parsing_success<T>{std::move(ret)};
     }
 
     template <typename U>
