@@ -44,11 +44,12 @@ concept node = requires {
 };
 
 #define DEF_ALIASES(T)                                                                                                 \
-    using ptr = std::unique_ptr<T>;                                                                                    \
+    using ptr = indirect<T>;                                                                                           \
+    using opt = std::optional<ptr>;                                                                                    \
     using vec = std::vector<ptr>;                                                                                      \
     static auto uniq(auto&&... args) -> ptr                                                                            \
     {                                                                                                                  \
-        return std::make_unique<T>(std::forward<decltype(args)>(args)...);                                             \
+        return indirect<T>{std::in_place, std::forward<decltype(args)>(args)...};                                      \
     }
 
 struct if_expr;
@@ -198,8 +199,8 @@ struct local
     DEF_ALIASES(local)
 
     pattern::ptr pat;
-    type_name::ptr type;
-    any_expr::ptr init;
+    type_name::opt type;
+    any_expr::opt init;
 };
 
 struct any_stmt
@@ -234,7 +235,7 @@ struct if_expr
 
     any_expr::ptr cond;
     block_expr::ptr tru;
-    else_expr::ptr fls;
+    else_expr::opt fls;
 
     static auto need_semi() -> bool
     {
@@ -259,7 +260,7 @@ struct return_expr
 {
     DEF_ALIASES(return_expr)
 
-    any_expr::ptr expr;
+    any_expr::opt expr;
 
     static auto need_semi() -> bool
     {
@@ -397,7 +398,6 @@ struct trans_unit
 #define NAIVE_PRINT_DEF(T, ...)                                                                                        \
     auto naive_print(const T::ptr& node) -> void                                                                       \
     {                                                                                                                  \
-        if (!node) return print("null");                                                                               \
         print("{} ", #T);                                                                                              \
         indently_print([&] -> void {                                                                                   \
             FOR_EACH(NAIVE_PRINT_FIELD, node, __VA_ARGS__)                                                             \
@@ -543,10 +543,6 @@ struct naive_printer : indent_printer
 
     auto naive_print(const trans_unit::ptr& tu)
     {
-        if (!tu) {
-            println("null");
-            return;
-        }
         naive_print(tu->fns);
         println();
     }
@@ -647,14 +643,12 @@ struct pretty_printer : indent_printer
     auto pretty_print(const name::ptr& n)
     {
         print("Name");
-        if (!n) return print(" {{}}");
         print("({:?})", utf::utf32_to_utf8(n->str));
     }
 
     auto pretty_print(const pattern::ptr& p)
     {
         print("Pattern ");
-        if (!p) return print("{{}}");
         indently_print([&] {
             pretty_println(p->pat);
         });
@@ -663,7 +657,6 @@ struct pretty_printer : indent_printer
     auto pretty_print(const type_name::ptr& t)
     {
         print("Type ");
-        if (!t) return print("{{}}");
         indently_print([&] {
             pretty_println(t->name);
         });
@@ -672,7 +665,6 @@ struct pretty_printer : indent_printer
     auto pretty_print(const operato::ptr& t)
     {
         print("Operator ");
-        if (!t) return print("{{}}");
         indently_print([&] {
             pretty_println(t->op);
         });
@@ -681,7 +673,6 @@ struct pretty_printer : indent_printer
     auto pretty_print(const lit_bool::ptr& e)
     {
         print("LitBool ");
-        if (!e) return print("{{}}");
         indently_print([&] {
             pretty_print("value", e->value);
         });
@@ -690,7 +681,6 @@ struct pretty_printer : indent_printer
     auto pretty_print(const lit_float::ptr& e)
     {
         print("LitFloat ");
-        if (!e) return print("{{}}");
         indently_print([&] {
             pretty_print("value", e->value);
             pretty_print("suffix", e->suffix);
@@ -700,7 +690,6 @@ struct pretty_printer : indent_printer
     auto pretty_print(const lit_int::ptr& e)
     {
         print("LitInt ");
-        if (!e) return print("{{}}");
         indently_print([&] {
             pretty_print("value", e->value);
             pretty_print("suffix", e->suffix);
@@ -711,7 +700,6 @@ struct pretty_printer : indent_printer
     auto pretty_print(const lit_str::ptr& e)
     {
         print("LitStr ");
-        if (!e) return print("{{}}");
         indently_print([&] {
             pretty_print("value", e->value);
             pretty_print("suffix", e->suffix);
@@ -721,7 +709,6 @@ struct pretty_printer : indent_printer
     auto pretty_print(const lit_char::ptr& e)
     {
         print("LitChar ");
-        if (!e) return print("{{}}");
         indently_print([&] {
             pretty_print("value", e->value);
             pretty_print("suffix", e->suffix);
@@ -731,7 +718,6 @@ struct pretty_printer : indent_printer
     auto pretty_print(const lit_expr::ptr& e)
     {
         print("Lit ");
-        if (!e) return print("{{}}");
         indently_print([&] {
             pretty_println(e->lit);
         });
@@ -739,14 +725,12 @@ struct pretty_printer : indent_printer
 
     auto pretty_print(const any_expr::ptr& e)
     {
-        if (!e) return print("AnyExpr {{}}");
         pretty_print(e->expr);
     }
 
     auto pretty_print(const expr_stmt::ptr& s)
     {
         print("ExprStmt ");
-        if (!s) return print("{{}}");
         indently_print([&] {
             pretty_println(s->expr);
         });
@@ -755,48 +739,41 @@ struct pretty_printer : indent_printer
     auto pretty_print(const local::ptr& l)
     {
         print("Local ");
-        if (!l) return print("{{}}");
         indently_print([&] {
             pretty_print("pat", l->pat);
-            if (l->type) pretty_print("type", l->type);
-            if (l->init) pretty_print("init", l->init);
+            pretty_print("type", l->type);
+            pretty_print("init", l->init);
         });
     }
 
     auto pretty_print(const any_stmt::ptr& s)
     {
-        if (!s) return print("AnyStmt {{}}");
         pretty_print(s->stmt);
     }
 
     auto pretty_print(const block_expr::ptr& e)
     {
         print("BlockExpr ");
-        if (!e) return print("{{}}");
         pretty_print(e->stmts);
     }
 
     auto pretty_print(const else_expr::ptr& e)
     {
-        if (!e) return print("ElseExpr {{}}");
         pretty_print(e->body);
     }
 
     auto pretty_print(const if_expr::ptr& e)
     {
         print("IfExpr ");
-        if (!e) return print("{{}}");
         indently_print([&] {
             pretty_print("cond", e->cond);
             pretty_print("body", e->tru);
-            if (e->fls) pretty_print("else", e->fls);
         });
     }
 
     auto pretty_print(const while_expr::ptr& e)
     {
         print("WhileExpr ");
-        if (!e) return print("{{}}");
         indently_print([&] {
             pretty_print("cond", e->cond);
             pretty_print("body", e->body);
@@ -806,7 +783,6 @@ struct pretty_printer : indent_printer
     auto pretty_print(const return_expr::ptr& e)
     {
         print("ReturnExpr ");
-        if (!e) return print("{{}}");
         indently_print([&] {
             pretty_println(e->expr);
         });
@@ -825,7 +801,6 @@ struct pretty_printer : indent_printer
     auto pretty_print(const paren_expr::ptr& e)
     {
         print("ParenExpr ");
-        if (!e) return print("{{}}");
         indently_print([&] {
             pretty_println(e->expr);
         });
@@ -834,7 +809,6 @@ struct pretty_printer : indent_printer
     auto pretty_print(const call_expr::ptr& e)
     {
         print("CallExpr ");
-        if (!e) return print("{{}}");
         indently_print([&] {
             pretty_print("callee", e->callee);
             pretty_print("args", e->args);
@@ -844,7 +818,6 @@ struct pretty_printer : indent_printer
     auto pretty_print(const bin_expr::ptr& e)
     {
         print("BinExpr ");
-        if (!e) return print("{{}}");
         indently_print([&] {
             pretty_print("lhs", e->lhs);
             pretty_print("op", e->op);
@@ -855,7 +828,6 @@ struct pretty_printer : indent_printer
     auto pretty_print(const chain_expr::ptr& e)
     {
         print("ChainExpr ");
-        if (!e) return print("{{}}");
         indently_print([&] {
             pretty_println(e->chain);
         });
@@ -864,17 +836,15 @@ struct pretty_printer : indent_printer
     auto pretty_print(const parameter::ptr& p)
     {
         print("Parameter ");
-        if (!p) return print("{{}}");
         indently_print([&] {
             pretty_print("pat", p->pat);
-            if (p->type) pretty_print("type", p->type);
+            pretty_print("type", p->type);
         });
     }
 
     auto pretty_print(const asm_block::ptr& b)
     {
         print("AsmBlock ");
-        if (!b) return print("{{}}");
         indently_print([&] {
             pretty_println(b->asms);
         });
@@ -883,7 +853,6 @@ struct pretty_printer : indent_printer
     auto pretty_print(const fn_sign::ptr& s)
     {
         print("FnSign ");
-        if (!s) return print("{{}}");
         indently_print([&] {
             pretty_print("paras", s->paras);
             pretty_print("ret", s->ret);
@@ -893,7 +862,6 @@ struct pretty_printer : indent_printer
     auto pretty_print(const fn_decl::ptr& d)
     {
         print("FnDecl ");
-        if (!d) return print("{{}}");
         indently_print([&] {
             pretty_print("name", d->name);
             pretty_print("sign", d->sign);
@@ -904,7 +872,6 @@ struct pretty_printer : indent_printer
     auto pretty_print(const trans_unit::ptr& tu)
     {
         print("TransUnit ");
-        if (!tu) return print("{{}}");
         pretty_print(tu->fns);
     }
 };

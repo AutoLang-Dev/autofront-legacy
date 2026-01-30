@@ -232,16 +232,16 @@ struct parsing_promise
 
     template <typename... Args>
         requires requires(Args... args) {
-            requires is_unique_ptr_v<T>;
-            typename T::element_type;
-            std::make_unique<typename T::element_type>(std::forward<Args>(args)...);
+            // requires is_unique_ptr_v<T>;
+            typename T::value_type;
+            make_indirect<typename T::value_type>(std::forward<Args>(args)...);
         } // && std::constructible_from<typename T::element_type, Args...>
     auto return_value(uniqueing<Args...> f) -> void
     {
         result_ = parsing_success<T>{
             .value = std::apply(
                 [](Args... args) {
-                    return std::make_unique<typename T::element_type>(std::forward<Args>(args)...);
+                    return make_indirect<typename T::value_type>(std::forward<Args>(args)...);
                 },
                 std::move(f.args)),
         };
@@ -299,13 +299,13 @@ struct parsing_promise
     }
 
     template <typename... Args>
-        requires is_unique_ptr_v<T>
+    // requires is_unique_ptr_v<T>
     auto await_transform(uniqueing<Args...> f)
     {
         return just_awaitable{
             std::apply(
                 [](Args... args) {
-                    return std::make_unique<T>(std::forward<Args>(args)...);
+                    return make_indirect<T>(std::forward<Args>(args)...);
                 },
                 std::move(f.args)),
         };
@@ -710,13 +710,15 @@ auto parse_if_expr() -> parsing<ast::if_expr::ptr>
     co_await parse_token(lexeme::If);
     auto cond = co_await parse_any_expr();
     auto tru  = co_await parse_block_expr();
-    auto fls  = co_await parse_else_expr();
+    auto fls  = ast::else_expr::opt{};
+    if (co_await is_token_of(lexeme::Else)) {
+        fls = co_await parse_else_expr();
+    }
     co_return uniq(std::move(cond), std::move(tru), std::move(fls));
 }
 
 auto parse_else_expr() -> parsing<ast::else_expr::ptr>
 {
-    if (!co_await is_token_of(lexeme::Else)) co_return nullptr;
     co_await parse_token(lexeme::Else);
     if (co_await is_group_of(token_tree::delimiter::brace)) {
         co_return uniq(co_await parse_block_expr());
@@ -747,7 +749,7 @@ auto is_bound_token() -> parsing<bool>
 auto parse_return_expr() -> parsing<ast::return_expr::ptr>
 {
     co_await parse_token(lexeme::Return);
-    auto expr = ast::any_expr::ptr{};
+    auto expr = ast::any_expr::opt{};
     if (!co_await is_bound_token()) {
         expr = co_await parse_any_expr();
     }
@@ -966,11 +968,11 @@ auto parse_local() -> parsing<ast::local::ptr>
 {
     auto pat = co_await parse_pattern();
     co_await parse_token(lexeme::Colon);
-    auto type = ast::type_name::ptr{};
+    auto type = ast::type_name::opt{};
     if (co_await peek_lexeme() != lexeme::Assign) {
         type = co_await parse_type_name();
     }
-    auto init = ast::any_expr::ptr{};
+    auto init = ast::any_expr::opt{};
     if (co_await peek_lexeme() == lexeme::Assign) {
         co_await parse_token(lexeme::Assign);
         init = co_await parse_any_expr();

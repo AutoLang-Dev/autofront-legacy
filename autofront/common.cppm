@@ -27,6 +27,53 @@ constexpr auto xid_continues_delta = std::array{
     // ...
 };
 
+template <typename T>
+struct is_in_place_type_t
+{
+    static constexpr auto value = false;
+};
+
+template <typename T>
+struct is_in_place_type_t<std::in_place_type_t<T>>
+{
+    static constexpr auto value = true;
+};
+
+template <typename T>
+constexpr auto is_in_place_type_t_v = is_in_place_type_t<T>::value;
+
+template <typename B>
+concept boolean_testable = requires(B&& b) {
+    requires std::convertible_to<B, bool>;
+    { !std::forward<B>(b) } -> std::convertible_to<bool>;
+};
+
+template <typename T, typename U>
+    requires requires(const T& t, const U& u) {
+        { t < u } -> boolean_testable;
+        { u < t } -> boolean_testable;
+    }
+constexpr auto synth_three_way(const T& t, const U& u)
+{
+    if constexpr (std::three_way_comparable_with<T, U>) {
+        return t <=> u;
+    } else {
+        if (t < u) return std::weak_ordering::less;
+        if (u < t) return std::weak_ordering::greater;
+        return std::weak_ordering::equivalent;
+    }
+}
+
+template <typename T, typename U = T>
+using synth_three_way_result = decltype(synth_three_way(std::declval<T&>(), std::declval<U&>()));
+
+struct delegate_t
+{
+} delegate;
+
+template <typename T>
+concept yes = true;
+
 export namespace autofront
 {
 
@@ -379,8 +426,8 @@ just_awaitable(T x) -> just_awaitable<remove_rval_cref_t<T>>;
 auto assert_(bool pred, std::string_view msg, std::source_location l = std::source_location::current())
 {
     if (pred) return;
-    std::println("{}", i18n::assert_fail(l.file_name(), l.line(), l.column(), l.function_name()));
-    std::println("{}", msg);
+    std::println(std::cerr, "{}", i18n::assert_fail(l.file_name(), l.line(), l.column(), l.function_name()));
+    std::println(std::cerr, "{}", msg);
     std::terminate();
 }
 
@@ -455,11 +502,373 @@ protected:
     }
 };
 
-template <typename... Ts>
-using sum = std::variant<std::unique_ptr<Ts>...>;
+template <typename T, typename Allocator>
+concept indirectable = requires {
+    requires std::is_object_v<T>;
+    requires !std::is_array_v<T>;
+    requires !std::same_as<T, std::in_place_t>;
+    requires !is_in_place_type_t_v<T>;
+    requires std::same_as<T, std::remove_cv_t<T>>;
+    requires std::same_as<T, typename std::allocator_traits<Allocator>::value_type>;
+};
+
+
+template <typename T, typename Allocator = std::allocator<T>>
+// requires indirectable<T, Allocator>
+struct indirect;
+
+template <typename T>
+struct is_indirect_impl
+{
+    static constexpr auto value = false;
+};
+
+template <typename T>
+struct is_indirect_impl<indirect<T>>
+{
+    static constexpr auto value = true;
+};
+
+template <typename T>
+concept not_indirect = !is_indirect_impl<T>::value;
+
+// std::indirect 的替代物
+template <typename T, typename Allocator = std::allocator<T>>
+// requires indirectable<T, Allocator>
+struct indirect
+{
+    using value_type     = T;
+    using allocator_type = Allocator;
+    using pointer        = typename std::allocator_traits<Allocator>::pointer;
+    using const_pointer  = typename std::allocator_traits<Allocator>::const_pointer;
+
+private:
+    template <typename U, typename A>
+    // requires indirectable<U, A>
+    friend struct indirect;
+
+    using traits = std::allocator_traits<Allocator>;
+
+    pointer p_;
+    Allocator alloc_;
+
+    template <typename... Args>
+    auto construct_with_alloc(Allocator& alloc, Args&&... args) -> pointer
+    {
+        auto p = traits::allocate(alloc, sizeof(value_type));
+        traits::construct(alloc, p, std::forward<Args>(args)...);
+        return p;
+    }
+
+    template <typename... Args>
+    auto construct(Args&&... args) -> pointer
+    {
+        return construct_with_alloc(alloc_, std::forward<Args>(args)...);
+    }
+
+    auto destroy_with_alloc(Allocator& alloc, pointer p) noexcept -> void
+    {
+        traits::destroy(alloc, p);
+        traits::deallocate(alloc, p, sizeof(value_type));
+    }
+
+    auto destroy(pointer p) noexcept -> void
+    {
+        destroy_with_alloc(alloc_, p);
+    }
+
+    constexpr explicit indirect(delegate_t) : p_{}, alloc_{} {}
+    constexpr explicit indirect(delegate_t, const Allocator& a)
+        : p_{}, alloc_(a) // 按要求使用 direct-non-list-initialization
+                          // 参考 https://zh.cppreference.com/w/cpp/memory/indirect/indirect.html
+    {
+    }
+
+public:
+    constexpr explicit indirect() noexcept(std::is_nothrow_default_constructible_v<value_type>)
+        // requires std::is_default_constructible_v<T>
+        : indirect{delegate}
+    {
+        p_ = construct();
+    }
+
+    constexpr explicit indirect(std::allocator_arg_t, const Allocator& a)
+        // requires std::is_default_constructible_v<T>
+        : indirect{delegate, a}
+    {
+        p_ = construct();
+    }
+
+    constexpr explicit indirect(T v) : indirect{delegate}
+    {
+        p_ = construct(std::move(v));
+    }
+
+    template <typename U = T>
+    // requires std::constructible_from<T, U&&>
+    constexpr explicit indirect(std::allocator_arg_t, const Allocator& a, U&& v) : indirect{delegate, a}
+    {
+        p_ = construct(std::forward<U>(v));
+    }
+
+    template <typename... Args>
+    // requires std::constructible_from<T, Args...>
+    constexpr explicit indirect(std::in_place_t, Args&&... args) : indirect{delegate}
+    {
+        p_ = construct(std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    // requires std::constructible_from<T, Args...>
+    constexpr explicit indirect(std::allocator_arg_t, const Allocator& a, std::in_place_t, Args&&... args)
+        : indirect{delegate, a}
+    {
+        p_ = construct(std::forward<Args>(args)...);
+    }
+
+    template <typename I, typename... Args>
+    // requires std::constructible_from<T, std::initializer_list<I>&, Args...>
+    constexpr explicit indirect(std::in_place_t, std::initializer_list<I> ilist, Args&&... args) : indirect{delegate}
+    {
+        p_ = construct(ilist, std::forward<Args>(args)...);
+    }
+
+    template <typename I, typename... Args>
+    // requires std::constructible_from<T, std::initializer_list<I>&, Args...>
+    constexpr explicit indirect(
+        std::allocator_arg_t, const Allocator& a, std::in_place_t, std::initializer_list<I> ilist, Args&&... args)
+        : indirect{delegate, a}
+    {
+        p_ = construct(ilist, std::forward<Args>(args)...);
+    }
+
+    constexpr indirect(const indirect& other)
+        // requires std::copy_constructible<T>
+        : indirect{delegate, traits::select_on_container_copy_construction(other.alloc_)}
+    {
+        if (other.p_) p_ = construct(*other.p_);
+    }
+
+    constexpr indirect(std::allocator_arg_t, const Allocator& a, const indirect& other)
+        // requires std::copy_constructible<T>
+        : indirect{delegate, a}
+    {
+        if (other.p_) p_ = construct(*other.p_);
+    }
+
+    constexpr indirect(indirect&& other) noexcept
+        // requires std::move_constructible<T>
+        : indirect{delegate, std::move(other.alloc_)}
+    {
+        p_       = other.p_;
+        other.p_ = nullptr;
+    }
+
+    constexpr indirect(std::allocator_arg_t, const Allocator& a, indirect&& other)
+        noexcept(traits::is_always_equal::value)
+        // requires std::move_constructible<T>
+        : indirect{delegate, a}
+    {
+        if (alloc_ == other.alloc_) {
+            p_       = other.p_;
+            other.p_ = nullptr;
+        } else if (other.p_) {
+            p_ = construct(std::move(*other.p_));
+        }
+    }
+
+    constexpr ~indirect() noexcept
+    {
+        if (p_) destroy(p_);
+    }
+
+    constexpr auto operator=(const indirect& other) -> indirect&
+    // requires std::is_copy_assignable_v<T> && std::copy_constructible<T>
+    {
+        if (std::addressof(other) == this) return *this;
+        constexpr auto update_alloc = traits::propagate_on_container_copy_assignment::value;
+        if (!other.p_) {
+            if (p_) {
+                destroy(p_);
+                p_ = nullptr;
+            }
+        } else if (alloc_ == other.alloc_ && p_) {
+            *p_ = *other.p_;
+        } else {
+            auto& alloc = update_alloc ? other.alloc_ : alloc_;
+            auto new_p  = construct_with_alloc(alloc, *other.p_);
+            destroy(p_);
+            p_ = new_p;
+        }
+        if constexpr (update_alloc) {
+            alloc_ = other.alloc_;
+        }
+        return *this;
+    }
+
+    constexpr auto operator=(indirect&& other)
+        noexcept(traits::propagate_on_container_move_assignment::value || traits::is_always_equal::value) -> indirect&
+    // requires std::copy_constructible<T>
+    {
+        if (std::addressof(other) == this) return *this;
+        constexpr auto update_alloc = traits::propagate_on_container_move_assignment::value;
+        if (!other.p_) {
+            if (p_) {
+                destroy(p_);
+                p_ = nullptr;
+            }
+        } else if (alloc_ == other.alloc_) {
+            if (p_) {
+                destroy(p_);
+            }
+            p_       = other.p_;
+            other.p_ = nullptr;
+        } else {
+            auto& alloc = update_alloc ? other.alloc_ : alloc_;
+            auto new_p  = construct_with_alloc(alloc, std::move(*other.p_));
+            destroy(p_);
+            p_ = new_p;
+        }
+        if constexpr (update_alloc) {
+            alloc_ = other.alloc_;
+        }
+        return *this;
+    }
+
+    template <typename U = T>
+    // requires requires {
+    //     requires !std::same_as<std::remove_cvref_t<U>, indirect>;
+    //     requires std::constructible_from<T, U>;
+    //     requires std::assignable_from<T&, U>;
+    // }
+    constexpr auto operator=(U&& value) -> indirect&
+    {
+        if (!p_) {
+            p_ = construct(std::forward<U>(value));
+        } else {
+            *p_ = std::forward<U>(value);
+        }
+    }
+
+    constexpr auto operator->() const noexcept -> const_pointer
+    {
+        assert_(p_, i18n::valueless_indirect());
+        return p_;
+    }
+
+    constexpr auto operator->() noexcept -> pointer
+    {
+        assert_(p_, i18n::valueless_indirect());
+        return p_;
+    }
+
+    constexpr auto operator*() const& noexcept -> const T&
+    {
+        assert_(p_, i18n::valueless_indirect());
+        return *p_;
+    }
+
+    constexpr auto operator*() & noexcept -> T&
+    {
+        assert_(p_, i18n::valueless_indirect());
+        return *p_;
+    }
+
+    constexpr auto operator*() const&& noexcept -> const T&&
+    {
+        assert_(p_, i18n::valueless_indirect());
+        return std::move(*p_);
+    }
+
+    constexpr auto operator*() && noexcept -> T&&
+    {
+        assert_(p_, i18n::valueless_indirect());
+        return std::move(*p_);
+    }
+
+    constexpr auto valueless_after_move() const noexcept -> bool
+    {
+        return !p_;
+    }
+
+    constexpr auto get_allocator() const noexcept -> allocator_type
+    {
+        return alloc_;
+    }
+
+    constexpr auto swap(indirect& other)
+        noexcept(traits::propagate_on_container_swap::value || traits::is_always_equal::value) -> void
+    // requires std::swappable<Allocator>
+    {
+        std::swap(p_, other.p_);
+        constexpr auto swap_allocators = traits::propagate_on_container_swap::value;
+        if (swap_allocators) {
+            using std::swap;
+            swap(alloc_, other.alloc_);
+        } else {
+            assert_(alloc_ == other.alloc_, i18n::indirect_alloc_neq_swap());
+        }
+    }
+
+    template <typename U, typename A>
+    // requires std::equality_comparable_with<T, U>
+    friend constexpr auto operator==(const indirect& lhs, const indirect<U, A>& rhs) noexcept(noexcept(*lhs == *rhs))
+        -> bool
+    {
+        if (!lhs.p_ && !rhs.p_) return true;
+        if (!lhs.p_ || !rhs.p_) return false;
+        return *lhs.p_ == *rhs.p_;
+    }
+
+    template <typename U, typename A>
+    friend constexpr auto operator<=>(const indirect& lhs, const indirect<U, A>& rhs)
+        noexcept(noexcept(synth_three_way(*lhs, *rhs))) -> synth_three_way_result<T, U>
+    {
+        if (lhs.p_ && rhs.p_) return synth_three_way(*lhs.p_, *rhs.p_);
+        return !lhs.valueless_after_move() <=> !rhs.valueless_after_move();
+    }
+
+    template <not_indirect U>
+    // requires std::equality_comparable_with<T, U> // 不能写这行，否则会导致约束形成循环依赖
+    friend constexpr auto operator==(const indirect& ind, const U& value) noexcept(noexcept(*ind == value)) -> bool
+    {
+        static_assert(std::equality_comparable_with<T, U>);
+        if (!ind.p_) return false;
+        return *ind.p_ == value;
+    }
+
+    template <typename U>
+    friend constexpr auto operator<=>(const indirect& ind, const U& value)
+        noexcept(noexcept(synth_three_way(*ind, value))) -> synth_three_way_result<T, U>
+    {
+        if (!ind.p_) return std::strong_ordering::less;
+        return synth_three_way(*ind.p_, value);
+    }
+
+    friend constexpr auto swap(indirect& lhs, indirect& rhs) noexcept(noexcept(lhs.swap(rhs))) -> void
+    {
+        lhs.swap(rhs);
+    }
+};
+
+template <typename Value>
+indirect(Value) -> indirect<Value>;
+
+template <typename Alloc, typename Value>
+indirect(std::allocator_arg_t, Alloc, Value)
+    -> indirect<Value, typename std::allocator_traits<Alloc>::template rebind_alloc<Value>>;
+
+template <typename T, typename... Args>
+auto make_indirect(Args&&... args) -> indirect<T>
+{
+    return indirect<T>(std::in_place, std::forward<Args>(args)...);
+}
 
 template <typename... Ts>
-using optsum = std::variant<std::monostate, std::unique_ptr<Ts>...>;
+using sum = std::variant<indirect<Ts>...>;
+
+template <typename... Ts>
+using optsum = std::variant<std::monostate, indirect<Ts>...>;
 
 }
 
@@ -472,7 +881,33 @@ struct std::formatter<autofront::source_position, char> : public std::formatter<
     }
 };
 
+// template <>
+// struct std::formatter<char32_t, char> : public std::formatter<std::string_view, char>
+// {
+//     auto format(char32_t ch, auto&& ctx) const
+//     {
+//         return std::format_to(ctx.out(), "U+{:X}", static_cast<std::uint32_t>(ch));
+//         // auto u32sv = std::u32string_view{&ch, 1uz};
+//         // auto u8s = autofront::utf::utf32_to_utf8(u32sv);
+//         // return std::format_to(ctx.out(), "{:?}", u8s);
+//     }
+// };
+
+
 template <typename Promise>
 struct std::hash<autofront::unique_coro<Promise>> : std::hash<std::coroutine_handle<Promise>>
 {
+};
+
+template <typename T, typename Allocator>
+    requires requires(const T& x) {
+        { std::hash<T>{}(x) } -> std::convertible_to<std::size_t>;
+    }
+struct std::hash<autofront::indirect<T, Allocator>>
+{
+    static auto operator()(const autofront::indirect<T, Allocator>& ind) noexcept -> std::size_t
+    {
+        if (ind.valueless_after_move()) return std::hash<T*>{}(nullptr);
+        return std::hash<T>{}(*ind);
+    }
 };
